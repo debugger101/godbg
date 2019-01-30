@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"github.com/peterh/liner"
+	"godbg/bininfo"
 	"godbg/log"
 	alog "log"
 	"os"
@@ -10,6 +13,11 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+)
+
+const (
+	_AT_NULL_AMD64  = 0
+	_AT_ENTRY_AMD64 = 9
 )
 
 var logger *alog.Logger
@@ -87,7 +95,7 @@ func cliRun() {
 			logger.Printf("\t[run] bye")
 			quit = true
 		default:
-			fmt.Printf("Wrong input, please document\n")
+			fmt.Printf("Wrong input, please read document\n")
 			logger.Printf("\t[run] receive default\n")
 		}
 
@@ -97,10 +105,10 @@ func cliRun() {
 	}
 }
 
-func launch(cmd []string) {
+func launch(cmd []string) *os.Process {
 	var (
-		process *exec.Cmd
-		err     error
+		execmd *exec.Cmd
+		err    error
 	)
 
 	// copy from dlv:  check that the argument to Launch is an executable file
@@ -112,27 +120,51 @@ func launch(cmd []string) {
 	// don't konw LockOSThread()
 	// runtime.LockOSThread()
 
-	process = exec.Command(cmd[0])
-	process.Stdout = os.Stdout
-	process.Stderr = os.Stderr
-	//process.SysProcAttr = &syscall.SysProcAttr{Ptrace: true, Setpgid: true, Foreground: false}
-	process.SysProcAttr = &syscall.SysProcAttr{Ptrace: true, Foreground: false}
+	execmd = exec.Command(cmd[0])
+	execmd.Stdout = os.Stdout
+	execmd.Stderr = os.Stderr
+	//execmd.SysProcAttr = &syscall.SysProcAttr{Ptrace: true, Setpgid: true, Foreground: false}
+	execmd.SysProcAttr = &syscall.SysProcAttr{Ptrace: true, Foreground: false}
 
-	err = process.Start()
+	err = execmd.Start()
 	if err != nil {
 		logger.Printf("\t[launch] %s", err.Error())
 		panic(err)
 	}
-	logger.Printf("\t[launch] Waiting for %s to finish\n", strings.Join(cmd, ""))
+	logger.Printf("\t[launch] Waiting for exec:%s, pid:%d to finish\n", strings.Join(cmd, ""), execmd.Process.Pid)
 
 	// shouldn't panic
 	//if err != nil {
 	//	logger.Printf("\t[launch] %s\n", err.Error())
 	//	panic(err)
 	//}
-	err = process.Wait()
+	err = execmd.Wait()
 	if err != nil {
-		logger.Printf("\t[launch] childre process get %s\n", err.Error())
+		logger.Printf("\t[launch] childre execmd get %s\n", err.Error())
+	}
+	return execmd.Process
+}
+
+func entryPointFromAuxvAMD64(auxv []byte) uint64 {
+	rd := bytes.NewBuffer(auxv)
+
+	for {
+		var tag, val uint64
+		err := binary.Read(rd, binary.LittleEndian, &tag)
+		if err != nil {
+			return 0
+		}
+		err = binary.Read(rd, binary.LittleEndian, &val)
+		if err != nil {
+			return 0
+		}
+
+		switch tag {
+		case _AT_NULL_AMD64:
+			return 0
+		case _AT_ENTRY_AMD64:
+			return val
+		}
 	}
 }
 
@@ -140,6 +172,9 @@ func main() {
 	debugFile := checkArgsAndBuild()
 	defer remove(debugFile)
 
-	launch([]string{debugFile})
+	process := launch([]string{debugFile})
+	bi := bininfo.LoadBinInfo(debugFile, process)
+	_ = bi
+
 	cliRun()
 }
