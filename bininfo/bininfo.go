@@ -31,7 +31,7 @@ type Function struct {
 	Name       string
 	Entry, End uint64
 	offset     dwarf.Offset
-	//cu         *compileUnit
+	cu         *compileUnit
 }
 
 const (
@@ -226,6 +226,7 @@ func LoadBinInfo(debugFile string, process *os.Process) (bi *BinaryInfo) {
 func loadDebugInfoMaps(dwarfD *dwarf.Data, dwarfReader *dwarf.Reader, debugLineBytes []byte) {
 	compileUnits := []*compileUnit{}
 	packageVars := []packageVar{}
+	functions := []Function{}
 
 	var cu *compileUnit
 	for entry, err := dwarfReader.Next(); entry != nil; entry, err = dwarfReader.Next() {
@@ -276,8 +277,11 @@ func loadDebugInfoMaps(dwarfD *dwarf.Data, dwarfReader *dwarf.Reader, debugLineB
 
 			logger.Printf("\t[loadDebugInfoMaps] dwarf.TagCompileUnit cu:%#v\n", cu)
 		case dwarf.TagPartialUnit:
-			logger.Printf("\t[loadDebugInfoMaps] not support TagPartialUnit\n")
-			panic("not support TagPartialUnit")
+			logger.Printf("\t[loadDebugInfoMaps] not support dwarf.TagPartialUnit\n")
+			panic("not support dwarf.TagPartialUnit")
+		case dwarf.TagImportedUnit:
+			logger.Printf("\t[loadDebugInfoMaps] not support dwarf.TagImportedUnit\n")
+			panic("not support dwarf.TagImportedUnit")
 		case dwarf.TagVariable:
 			if n, ok := entry.Val(dwarf.AttrName).(string); ok {
 				var addr uint64
@@ -291,13 +295,40 @@ func loadDebugInfoMaps(dwarfD *dwarf.Data, dwarfReader *dwarf.Reader, debugLineB
 				// packageVars = append(packageVars, packageVar{n, entry.Offset, addr + bi.staticBase})
 				packageVars = append(packageVars, packageVar{n, entry.Offset, addr + 0})
 			}
+		case dwarf.TagSubprogram:
+			var lowpc, highpc uint64
+			var ok bool
+			var name string
+			if ranges, _ := dwarfD.Ranges(entry); len(ranges) == 1 {
+				//lowpc = ranges[0][0] + bi.staticBase
+				//highpc = ranges[0][1] + bi.staticBase
+				lowpc = ranges[0][0] + 0
+				highpc = ranges[0][1] + 0
+			}
+			if name, ok = entry.Val(dwarf.AttrName).(string); !ok {
+				logger.Printf("\t[loadDebugInfoMaps] not support dwarf.TagSubprogram without dwarf.AttrName\n")
+				panic("not support dwarf.TagSubprogram without dwarf.AttrName")
+			}
+
+			var fn Function
+			if ok {
+				fn = Function{
+					Name:  name,
+					Entry: lowpc, End: highpc,
+					offset: entry.Offset,
+					cu:     cu,
+				}
+				functions = append(functions, fn)
+			}
 		}
 	}
 	for i := 0; i < len(compileUnits); i++ {
 		logger.Printf("\t[loadDebugInfoMaps] readAfterFor compileUnits[%d]:%#v \n", i, compileUnits[i])
 	}
-	logger.Printf("\t[loadDebugInfoMaps] readAfterFor compileUnits:%#v \n", compileUnits)
 	for i := 0; i < len(packageVars); i++ {
 		logger.Printf("\t[loadDebugInfoMaps] readAfterFor packageVars[%d]:%#v \n", i, packageVars[i])
+	}
+	for i := 0; i < len(functions); i++ {
+		logger.Printf("\t[loadDebugInfoMaps] readAfterFor functions[%d]:%#v \n", i, functions[i])
 	}
 }
