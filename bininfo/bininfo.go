@@ -16,6 +16,8 @@ import (
 	alog "log"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -61,8 +63,9 @@ type BinaryInfo struct {
 	// Maps package names to package paths, needed to lookup types inside DWARF info
 	packageMap map[string]string
 
-	dwarf       *dwarf.Data
-	dwarfReader *dwarf.Reader
+	dwarf        *dwarf.Data
+	dwarfReader  *dwarf.Reader
+	compileUnits []*compileUnit
 }
 
 type compileUnit struct {
@@ -163,6 +166,7 @@ func GetDebugSectionElf(f *elf.File, name string) ([]byte, error) {
 }
 
 func LoadBinInfo(debugFile string, process *os.Process) (bi *BinaryInfo) {
+	bi = &BinaryInfo{}
 	var (
 		auxvbuf        []byte
 		err            error
@@ -214,16 +218,13 @@ func LoadBinInfo(debugFile string, process *os.Process) (bi *BinaryInfo) {
 	}
 
 	dwarfReader = dwarfD.Reader()
-	loadDebugInfoMaps(dwarfD, dwarfReader, debugLineBytes)
+	bi.loadDebugInfoMaps(dwarfD, dwarfReader, debugLineBytes)
 
-	_ = dwarfReader
-	_ = dwarfD
-	_ = debugLineBytes
 	logger.Printf("\t[LoadBinInfo] debugLineBytes sucessfully \n")
-	return &BinaryInfo{}
+	return bi
 }
 
-func loadDebugInfoMaps(dwarfD *dwarf.Data, dwarfReader *dwarf.Reader, debugLineBytes []byte) {
+func (bi *BinaryInfo) loadDebugInfoMaps(dwarfD *dwarf.Data, dwarfReader *dwarf.Reader, debugLineBytes []byte) {
 	compileUnits := []*compileUnit{}
 	packageVars := []packageVar{}
 	functions := []Function{}
@@ -275,7 +276,7 @@ func loadDebugInfoMaps(dwarfD *dwarf.Data, dwarfReader *dwarf.Reader, debugLineB
 			}
 			compileUnits = append(compileUnits, cu)
 
-			logger.Printf("\t[loadDebugInfoMaps] dwarf.TagCompileUnit cu:%#v\n", cu)
+			// logger.Printf("\t[loadDebugInfoMaps] dwarf.TagCompileUnit cu:%#v\n", cu)
 		case dwarf.TagPartialUnit:
 			logger.Printf("\t[loadDebugInfoMaps] not support dwarf.TagPartialUnit\n")
 			panic("not support dwarf.TagPartialUnit")
@@ -300,8 +301,8 @@ func loadDebugInfoMaps(dwarfD *dwarf.Data, dwarfReader *dwarf.Reader, debugLineB
 			var ok bool
 			var name string
 			if ranges, _ := dwarfD.Ranges(entry); len(ranges) == 1 {
-				//lowpc = ranges[0][0] + bi.staticBase
-				//highpc = ranges[0][1] + bi.staticBase
+				// lowpc = ranges[0][0] + bi.staticBase
+				// highpc = ranges[0][1] + bi.staticBase
 				lowpc = ranges[0][0] + 0
 				highpc = ranges[0][1] + 0
 			}
@@ -322,13 +323,94 @@ func loadDebugInfoMaps(dwarfD *dwarf.Data, dwarfReader *dwarf.Reader, debugLineB
 			}
 		}
 	}
+	bi.compileUnits = compileUnits
 	for i := 0; i < len(compileUnits); i++ {
 		logger.Printf("\t[loadDebugInfoMaps] readAfterFor compileUnits[%d]:%#v \n", i, compileUnits[i])
+		cu = compileUnits[i]
+		dLI := cu.lineInfo
+		lookup := dLI.Lookup
+		for i, v := range lookup {
+			logger.Printf("\t[loadDebugInfoMaps] readAfterFor compileUnits[%d]: fileNames%#v \n", i, v)
+		}
 	}
+
+	bi.Sources = []string{}
+	for _, cu := range bi.compileUnits {
+		if cu.lineInfo != nil {
+			for _, fileEntry := range cu.lineInfo.FileNames {
+				bi.Sources = append(bi.Sources, fileEntry.Path)
+			}
+		}
+	}
+	sort.Strings(bi.Sources)
+	bi.Sources = uniq(bi.Sources)
+
+	for i := 0; i < len(bi.Sources); i++ {
+		logger.Printf("\t[loadDebugInfoMaps] readAfterFor Sources[%d]:%#v \n", i, bi.Sources[i])
+	}
+
 	for i := 0; i < len(packageVars); i++ {
 		logger.Printf("\t[loadDebugInfoMaps] readAfterFor packageVars[%d]:%#v \n", i, packageVars[i])
 	}
 	for i := 0; i < len(functions); i++ {
 		logger.Printf("\t[loadDebugInfoMaps] readAfterFor functions[%d]:%#v \n", i, functions[i])
 	}
+}
+
+func uniq(s []string) []string {
+	if len(s) <= 0 {
+		return s
+	}
+	src, dst := 1, 1
+	for src < len(s) {
+		if s[src] != s[dst-1] {
+			s[dst] = s[src]
+			dst++
+		}
+		src++
+	}
+	return s[:dst]
+}
+
+func partialPathMatch(expr, path string) bool {
+	if len(expr) < len(path)-1 {
+		return strings.HasSuffix(path, expr) && (path[len(path)-len(expr)-1] == '/')
+	}
+	return expr == path
+}
+
+func (bi *BinaryInfo) FindLocationFromFileLoc(filename string, lineno string) (uint64, error) {
+	var (
+		num            int
+		err            error
+		absfilename    string
+		candidateFiles []string
+	)
+	for _, file := range bi.Sources {
+		if partialPathMatch(filename, file) {
+			candidateFiles = append(candidateFiles, file)
+			if len(candidateFiles) >= 3 {
+				break
+			}
+		}
+	}
+
+	if len(candidateFiles) != 1 {
+		return 0, fmt.Errorf("Counld not find right filename %s", strings.Join(candidateFiles, ";"))
+	}
+	absfilename = candidateFiles[0]
+
+	num, err = strconv.Atoi(lineno)
+	if err != nil {
+		return 0, fmt.Errorf("Wrong lineno %s", lineno)
+	}
+	for _, cu := range bi.compileUnits {
+		if cu.lineInfo.Lookup[absfilename] != nil {
+			pc := cu.lineInfo.LineToPC(absfilename, num)
+			if pc != 0 {
+				return pc, nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("could not find %s:%s", filename, lineno)
 }

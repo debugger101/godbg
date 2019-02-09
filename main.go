@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"github.com/peterh/liner"
 	"godbg/bininfo"
+	"godbg/bp"
 	"godbg/log"
 	alog "log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 )
@@ -74,7 +76,12 @@ func checkArgsAndBuild() string {
 	return debugName
 }
 
-func cliRun() {
+func CliPutDoc() {
+	fmt.Printf("Wrong input, please read document\n")
+	logger.Printf("\t[run] receive default\n")
+}
+
+func cliRun(process *os.Process, bi *bininfo.BinaryInfo) {
 	line := liner.NewLiner()
 	defer line.Close()
 
@@ -89,16 +96,92 @@ func cliRun() {
 		}
 		cmdstr = strings.TrimSpace(cmdstr)
 		logger.Printf("\t[run] cmdstr:%v\n", cmdstr)
-		switch cmdstr {
-		case "q":
-			logger.Printf("\t[run] receive \"q\", quit\n")
-			logger.Printf("\t[run] bye")
-			quit = true
-		default:
-			fmt.Printf("Wrong input, please read document\n")
-			logger.Printf("\t[run] receive default\n")
-		}
 
+		if len(cmdstr) <= 0 {
+			CliPutDoc()
+		} else {
+			switch cmdstr[0] {
+			case 'q':
+				if len(cmdstr) != 1 && (cmdstr) != "quit" {
+					CliPutDoc()
+					break
+				}
+				logger.Printf("\t[run] receive \"q\", quit\n")
+				logger.Printf("\t[run] bye")
+				quit = true
+			case 'f':
+				logger.Printf("\t[run] receive \"f\", find\n")
+				splitstrs := strings.Split(cmdstr, " ")
+				if len(splitstrs) != 2 {
+					CliPutDoc()
+					break
+				}
+				findstr := splitstrs[0]
+				locstr := splitstrs[1]
+				if len(findstr) != 1 && (findstr) != "find" {
+					CliPutDoc()
+					break
+				}
+				filelocstr := strings.Split(locstr, ":")
+				if len(filelocstr) != 2 {
+					CliPutDoc()
+					break
+				}
+				if add, err := bi.FindLocationFromFileLoc(filelocstr[0], filelocstr[1]); err != nil {
+					fmt.Printf("Find Result something error: %s\n", err.Error())
+					break
+				} else {
+					fmt.Printf("Find Result as Addr: %#v\n", add)
+					break
+				}
+			case 'b':
+				logger.Printf("\t[run] receive \"b\", breakpoint\n")
+				splitstrs := strings.Split(cmdstr, " ")
+				if len(splitstrs) != 2 {
+					CliPutDoc()
+					break
+				}
+				bpstr := splitstrs[0]
+				locstr := splitstrs[1]
+				if len(bpstr) != 1 && (bpstr) != "breakpoint" {
+					CliPutDoc()
+					break
+				}
+				filelocstr := strings.Split(locstr, ":")
+				if len(filelocstr) != 2 {
+					CliPutDoc()
+					break
+				}
+				var (
+					add      uint64
+					err      error
+					original []byte
+				)
+				if add, err = bi.FindLocationFromFileLoc(filelocstr[0], filelocstr[1]); err != nil {
+					fmt.Printf("Find Result something error: %s\n", err.Error())
+					break
+				} else {
+					fmt.Printf("Find Result as Addr: %#v\n", add)
+				}
+				original, err = bp.SetBreakpoint(process.Pid, uintptr(add))
+				if err != nil {
+					fmt.Printf("Set pid:%d addr:%d err:%s\n", process.Pid, add, err.Error())
+					break
+				}
+				fmt.Printf("Set %s breakpoaint sucesullfy\n", locstr)
+				_ = original
+			case 'c':
+				err = bp.Continue(process.Pid)
+				if err != nil {
+					fmt.Printf("Continue Pid:%d failed\n", process.Pid)
+					break
+				}
+				fmt.Printf("Continue Pid:%d sucessfully\n", process.Pid)
+			default:
+				CliPutDoc()
+				break
+			}
+		}
 		if quit {
 			break
 		}
@@ -117,14 +200,14 @@ func launch(cmd []string) *os.Process {
 		panic(err)
 	}
 
-	// don't konw LockOSThread()
-	// runtime.LockOSThread()
+	// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! should be existed
+	runtime.LockOSThread()
 
 	execmd = exec.Command(cmd[0])
 	execmd.Stdout = os.Stdout
 	execmd.Stderr = os.Stderr
 	//execmd.SysProcAttr = &syscall.SysProcAttr{Ptrace: true, Setpgid: true, Foreground: false}
-	execmd.SysProcAttr = &syscall.SysProcAttr{Ptrace: true, Foreground: false}
+	execmd.SysProcAttr = &syscall.SysProcAttr{Ptrace: true, Setpgid: true, Foreground: false}
 
 	err = execmd.Start()
 	if err != nil {
@@ -174,7 +257,6 @@ func main() {
 
 	process := launch([]string{debugFile})
 	bi := bininfo.LoadBinInfo(debugFile, process)
-	_ = bi
 
-	cliRun()
+	cliRun(process, bi)
 }
