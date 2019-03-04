@@ -87,6 +87,8 @@ func cliRun(process *os.Process, bi *bininfo.BinaryInfo) {
 
 	line.SetCtrlCAborts(true)
 
+	bpc := &bp.BP{}
+
 	for {
 		var quit bool
 		var err error
@@ -153,9 +155,8 @@ func cliRun(process *os.Process, bi *bininfo.BinaryInfo) {
 					break
 				}
 				var (
-					add      uint64
-					err      error
-					original []byte
+					add uint64
+					err error
 				)
 				if add, err = bi.FindLocationFromFileLoc(filelocstr[0], filelocstr[1]); err != nil {
 					fmt.Printf("Find Result something error: %s\n", err.Error())
@@ -163,20 +164,46 @@ func cliRun(process *os.Process, bi *bininfo.BinaryInfo) {
 				} else {
 					fmt.Printf("Find Result as Addr: %#v\n", add)
 				}
-				original, err = bp.SetBreakpoint(process.Pid, uintptr(add))
-				if err != nil {
+				bpInfo := &bp.Info{
+					Pid:        process.Pid,
+					Original:   make([]byte, 1),
+					Filename:   filelocstr[0],
+					Filelineno: filelocstr[1],
+					Addr:       uintptr(add),
+				}
+
+				if err = bpc.SetBreakpoint(bpInfo); err != nil {
 					fmt.Printf("Set pid:%d addr:%d err:%s\n", process.Pid, add, err.Error())
 					break
 				}
 				fmt.Printf("Set %s breakpoaint sucesullfy\n", locstr)
-				_ = original
 			case 'c':
-				err = bp.Continue(process.Pid)
-				if err != nil {
+				if err = bp.Continue(process.Pid); err != nil {
 					fmt.Printf("Continue Pid:%d failed\n", process.Pid)
 					break
 				}
 				fmt.Printf("Continue Pid:%d sucessfully\n", process.Pid)
+			case 'l':
+				cmdTrimStr := strings.TrimSpace(cmdstr)
+				if cmdTrimStr == "l b" || cmdTrimStr == "l breakpoints" {
+					bpc.ListBreakpoint()
+				} else if cmdTrimStr == "l s" || cmdTrimStr == "l sources" {
+					var (
+						pc uint64
+					)
+					if pc, err = bpc.GetPC(process.Pid); err != nil {
+						fmt.Printf("l s failed, err:%s\n", err.Error())
+						break
+					}
+					_ = pc
+				} else if cmdTrimStr == "l r" || cmdTrimStr == "l regs" {
+					if err = bpc.ListRegs(process.Pid); err != nil {
+						fmt.Printf("[error] list regs err:%s\n", err.Error())
+					}
+				} else {
+					CliPutDoc()
+					break
+				}
 			default:
 				CliPutDoc()
 				break
