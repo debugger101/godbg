@@ -15,5 +15,13 @@ go build -o godbg main.go
 ./godbg debug ./test.go  
 ```
 
-
 inspire by [dlv](https://github.com/derekparker/delve)  
+
+> Reference： 
+>
+> [Writing a Linux Debugger](https://blog.tartanllama.xyz/writing-a-linux-debugger-setup/) 
+>
+> [elf101-64.pdf](<https://github.com/chainhelen/godbg/blob/master/file/elf101-64.pdf>)
+>
+> [ELF_Format.pdf](<https://github.com/chainhelen/godbg/blob/master/file/ELF_Format.pdf>)
+
