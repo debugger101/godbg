@@ -7,12 +7,12 @@ Copy part of the code as a personal learning only
 
 ```
 export GO111MODULE=on  
-go build -o godbg main.go   
+go build -o main main.go   
 
 // if you want to output log of debug, please do like below(如果想开调试日志，需要如下操作)  
 // export DBGLOG=stdout  
 
-./godbg debug ./test.go  
+./main debug ./test.go  
 ```
 
 
