@@ -1,9 +1,8 @@
 # godbg
-Start a new project, the debugger on linux platform for go   
-Copy part of the code as a personal learning only  
+Start a new project, the debugger on `linux` platform for go   
 
-开个新坑，go语言在linux下的调试器    
-本项目仅作为个人尝试学习之用，故会复制部分delve代码  
+开个新坑，go语言在`linux`下的调试器    
+
 
 ```
 export GO111MODULE=on  
@@ -15,7 +14,7 @@ go build -o godbg main.go
 ./godbg debug ./test.go  
 ```
 
-inspire by [dlv](https://github.com/derekparker/delve)  
+inspire by [dlv](https://github.com/derekparker/delve)  (has removed codes that copied from `dlv`)
 
 > Reference： 
 >
