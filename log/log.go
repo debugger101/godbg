@@ -6,18 +6,33 @@ import (
 	"go.uber.org/zap/zapcore"
 	"net/http"
 	"os"
+	"strings"
 )
 
 var Log *zap.Logger
 
 func init() {
 	encoderCfg := zap.NewProductionEncoderConfig()
-	encoderCfg.TimeKey = "ts"
+	encoderCfg.TimeKey = ""
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg.LevelKey = "lv"
 	encoderCfg.CallerKey = "caller"
 	encoderCfg.EncodeCaller = zapcore.ShortCallerEncoder
 
-	level := zapcore.InfoLevel
+	logLv := strings.ToLower(os.Getenv("DBGLOGLV"))
+	var level zapcore.Level
+
+	switch logLv {
+	case "debug":
+		level = zapcore.DebugLevel
+	case "info":
+		level = zapcore.InfoLevel
+	case "warn":
+		level = zapcore.WarnLevel
+	default:
+		level = zapcore.WarnLevel
+	}
+
 
 	http.HandleFunc("/debug", func(w http.ResponseWriter, r *http.Request) {
 		lv := r.PostFormValue("level")
