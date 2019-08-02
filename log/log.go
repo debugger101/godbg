@@ -29,8 +29,10 @@ func init() {
 		level = zapcore.InfoLevel
 	case "warn":
 		level = zapcore.WarnLevel
+	case "panic":
+		level = zapcore.PanicLevel
 	default:
-		level = zapcore.WarnLevel
+		level = zapcore.PanicLevel
 	}
 
 
