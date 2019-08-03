@@ -14,10 +14,23 @@ func printHelper() {
 }
 
 func printUnsupportCmd(cmd string) {
-	fmt.Printf("unsupport cmd %s\n", cmd)
+	fmt.Printf("unsupport cmd `%s`\n", cmd)
+}
+
+func printHasExistedBreakPoint(place string) {
+	fmt.Printf("existed breakpoint %s\n", place)
+}
+
+func printNotFoundSourceLineErr(place string) {
+	fmt.Printf("can't find this source line %s\n", place)
+}
+
+func printError(err error) {
+	fmt.Printf("%s\n", err.Error())
 }
 
 var logger = log.Log
+var bp = &BP{}
 var (
 	bi *BI
 	cmd *exec.Cmd

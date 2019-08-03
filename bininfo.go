@@ -11,6 +11,7 @@ import (
 	"strings"
 )
 
+var NotFoundSourceLineErr = errors.New("cant't find this source line")
 
 func analyze(execfile string) (*BI, error) {
 	var (
@@ -153,13 +154,17 @@ func parseLoc(loc string) (string, int, error) {
 	return filename, lineno, nil
 }
 
-func (b *BI) LineToPc(loc string) (uint64, error) {
+func (b *BI) locToPc(loc string) (uint64, error){
 	filename, lineno, err := parseLoc(loc)
 	if err != nil {
 		return 0, err
 	}
+	return b.fileLineToPc(filename, lineno)
+}
+
+func (b *BI) fileLineToPc(filename string, lineno int) (uint64, error) {
 	if b.Sources[filename] == nil || b.Sources[filename][lineno] == 0 {
-		return 0, errors.New("can't find addr about " + loc)
+		return 0, NotFoundSourceLineErr
 	}
 	return b.Sources[filename][lineno], nil
 }

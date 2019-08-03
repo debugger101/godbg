@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"syscall"
 )
 
@@ -62,7 +63,16 @@ func runexec(execfile string) (*exec.Cmd, error){
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Ptrace: true, Setpgid: true, Foreground: false}
 
+	// !!! maybe the diffrences of routine and thread in golang
+	runtime.LockOSThread()
+
 	if err := cmd.Start(); err != nil {
+		logger.Error("runexec:cmd.Start()", zap.Error(err))
+		return nil, err
+	}
+
+	if err := cmd.Wait(); err != nil && err.Error() != "stop signal: trace/breakpoint trap" {
+		logger.Error("runexec:cmd.Wait()", zap.Error(err))
 		return nil, err
 	}
 	return cmd, nil

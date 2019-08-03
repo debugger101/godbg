@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/c-bata/go-prompt"
 	"go.uber.org/zap"
 	"os"
@@ -9,8 +10,6 @@ import (
 
 func executor(input string) {
 	logger.Debug("executor", zap.String("input", input))
-
-	input = strings.ToLower(input)
 	if len(input) == 0 {
 		return
 	}
@@ -21,21 +20,31 @@ func executor(input string) {
 		if input == "q" || input == "quit"{
 			os.Exit(0)
 		}
-		printUnsupportCmd(input)
 	case 'b':
 		sps := strings.Split(input, " ")
 		if len(sps) == 2 && (sps[0] == "b" || sps[0] == "break") {
-			pc, err := bi.LineToPc(sps[1])
+			filename, line, err := parseLoc(sps[1])
 			if err != nil {
 				printUnsupportCmd(input)
 				return
 			}
-			_ = pc
+			if bInfo, err := bp.SetFileLineBreakPoint(filename, line); err != nil {
+				if err == HasExistedBreakPointErr {
+					printHasExistedBreakPoint(sps[1])
+					return
+				}
+				if err == NotFoundSourceLineErr {
+					printNotFoundSourceLineErr(sps[1])
+					return
+				}
+				printError(err)
+				return
+			} else {
+				fmt.Printf("godbg add %s:%d breakpoint successfully\n",bInfo.filename, bInfo.lineno)
+			}
 			return
 		}
-		printUnsupportCmd(input)
 	case 'c':
-		printUnsupportCmd(input)
 	}
 	printUnsupportCmd(input)
 }
