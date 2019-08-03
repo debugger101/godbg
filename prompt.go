@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 	"os"
 	"strings"
+	"syscall"
 )
 
 func executor(input string) {
@@ -37,7 +38,7 @@ func executor(input string) {
 					printNotFoundSourceLineErr(sps[1])
 					return
 				}
-				printError(err)
+				printErr(err)
 				return
 			} else {
 				fmt.Printf("godbg add %s:%d breakpoint successfully\n",bInfo.filename, bInfo.lineno)
@@ -45,6 +46,37 @@ func executor(input string) {
 			return
 		}
 	case 'c':
+		sps := strings.Split(input, " ")
+		if len(sps) == 1 && (sps[0] == "c" || sps[0] == "continue") {
+
+			if cmd.Process == nil {
+				printNoProcessErr()
+				return
+			}
+
+			if err := bp.Continue(); err != nil {
+				printErr(err)
+				return
+			}
+
+			var s syscall.WaitStatus
+			wpid, err := syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil)
+			if err != nil {
+				printErr(err)
+				return
+			}
+			status := (syscall.WaitStatus)(s)
+			if status.Exited() {
+				// TODO
+				if cmd.Process != nil && wpid == cmd.Process.Pid {
+					printExit0(wpid)
+				} else {
+					printExit0(wpid)
+				}
+				cmd.Process = nil
+			}
+			return
+		}
 	}
 	printUnsupportCmd(input)
 }

@@ -25,8 +25,17 @@ func printNotFoundSourceLineErr(place string) {
 	fmt.Printf("can't find this source line %s\n", place)
 }
 
-func printError(err error) {
+func printErr(err error) {
 	fmt.Printf("%s\n", err.Error())
+}
+
+func printNoProcessErr() {
+	fmt.Printf("there is no process running\n")
+}
+
+func printExit0(opid int) {
+	fmt.Printf("Process %d has exited with status 0\n", opid)
+
 }
 
 var logger = log.Log

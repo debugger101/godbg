@@ -114,6 +114,7 @@ func analyze(execfile string) (*BI, error) {
 					if bi.Sources[lineEntry.File.Name] == nil {
 						bi.Sources[lineEntry.File.Name] = make(map[int]uint64)
 					}
+
 					if _, ok := bi.Sources[lineEntry.File.Name][lineEntry.Line]; !ok {
 						bi.Sources[lineEntry.File.Name][lineEntry.Line] = lineEntry.Address
 					}

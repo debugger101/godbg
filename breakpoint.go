@@ -36,7 +36,10 @@ func (bp* BP)SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error) 
 			zap.Int(fullfilename, lineno))
 		return nil, err
 	}
-	logger.Debug("SetFileLineBreakPoint:fileLineToPc", zap.String("fullfilename", fullfilename), zap.Int("lineno", lineno))
+	logger.Debug("SetFileLineBreakPoint:fileLineToPc",
+		zap.Uint64("pc", pc),
+		zap.String("fullfilename", fullfilename),
+		zap.Int("lineno", lineno))
 
 	// no need to add RwLock
 	if bp.infos == nil {
@@ -78,4 +81,8 @@ func (bp* BP)SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error) 
 	bp.infos = append(bp.infos, bInfo)
 
 	return bInfo, nil
+}
+
+func (bp *BP)Continue() error {
+	return syscall.PtraceCont(cmd.Process.Pid, 0)
 }
