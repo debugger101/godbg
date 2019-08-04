@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"go.uber.org/zap"
 	"os"
 	"path"
@@ -17,8 +16,6 @@ type BInfo struct {
 type BP struct {
 	infos []*BInfo
 }
-
-var HasExistedBreakPointErr = errors.New("this breakpoint has existed")
 
 func (bp* BP)SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error) {
 	logger.Debug("SetFileLineBreakPoint", zap.String("filename", filename), zap.Int("lineno", lineno))

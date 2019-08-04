@@ -1,42 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"github.com/c-bata/go-prompt"
 	"github.com/chainhelen/godbg/log"
 	"go.uber.org/zap"
 	"os"
 	"os/exec"
 )
-
-func printHelper() {
-	fmt.Printf("%s\n", "Usage:\n\tJust like ./godgb debug main.go")
-}
-
-func printUnsupportCmd(cmd string) {
-	fmt.Printf("unsupport cmd `%s`\n", cmd)
-}
-
-func printHasExistedBreakPoint(place string) {
-	fmt.Printf("existed breakpoint %s\n", place)
-}
-
-func printNotFoundSourceLineErr(place string) {
-	fmt.Printf("can't find this source line %s\n", place)
-}
-
-func printErr(err error) {
-	fmt.Printf("%s\n", err.Error())
-}
-
-func printNoProcessErr() {
-	fmt.Printf("there is no process running\n")
-}
-
-func printExit0(opid int) {
-	fmt.Printf("Process %d has exited with status 0\n", opid)
-
-}
 
 var logger = log.Log
 var bp = &BP{}

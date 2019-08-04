@@ -11,8 +11,6 @@ import (
 	"strings"
 )
 
-var NotFoundSourceLineErr = errors.New("cant't find this source line")
-
 func analyze(execfile string) (*BI, error) {
 	var (
 		elffile *elf.File
@@ -168,4 +166,51 @@ func (b *BI) fileLineToPc(filename string, lineno int) (uint64, error) {
 		return 0, NotFoundSourceLineErr
 	}
 	return b.Sources[filename][lineno], nil
+}
+
+func (b *BI) pcTofileLine(pc uint64)(string, int, error) {
+	if b.Sources == nil {
+		return "", 0, errors.New("no sources file")
+	}
+
+	type Rs struct {
+		pc uint64
+		existedPc bool
+		filename string
+		lineno int
+	}
+
+	rangeMin := &Rs{}
+	rangeMax := &Rs{}
+
+
+	for filename, filenameMp := range b.Sources {
+		for lineno, addr := range filenameMp {
+			if addr == pc {
+				return filename, lineno, nil
+			}
+			if addr < pc && (!rangeMin.existedPc || addr > rangeMin.pc) {
+				rangeMin.pc = addr
+				rangeMin.existedPc = true
+				rangeMin.filename = filename
+				rangeMin.lineno = lineno
+			}
+			if pc < addr && (!rangeMax.existedPc || addr < rangeMax.pc) {
+				rangeMax.pc = addr
+				rangeMax.existedPc = true
+				rangeMax.filename = filename
+				rangeMax.lineno = lineno
+			}
+		}
+	}
+
+	if !(rangeMax.existedPc && rangeMax.existedPc) {
+		return "", 0, errors.New("invalid input")
+	}
+
+	if (rangeMax.pc - pc) > (pc - rangeMin.pc) {
+		return rangeMin.filename, rangeMin.lineno, nil
+	}
+
+	return rangeMax.filename, rangeMax.lineno, nil
 }
