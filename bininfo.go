@@ -11,6 +11,28 @@ import (
 	"strings"
 )
 
+type CompileUnit struct {
+	functions []*Function
+}
+
+type Function struct {
+	name string
+	lowpc uint64
+	highpc uint64
+	frameBase []byte
+	declFile int64
+	external bool
+
+	cu *CompileUnit
+}
+
+type BI struct {
+	Sources map[string]map[int]uint64
+	Functions []*Function
+	CompileUnits []*CompileUnit
+}
+
+
 func analyze(execfile string) (*BI, error) {
 	var (
 		elffile *elf.File
@@ -20,6 +42,10 @@ func analyze(execfile string) (*BI, error) {
 		dwarfData *dwarf.Data
 		dwarfReader *dwarf.Reader
 		curEntry *dwarf.Entry
+		curSubProgramEntry *dwarf.Entry
+		curCompileUnitEntry *dwarf.Entry
+		curCompileUnit *CompileUnit
+		curFunction *Function
 		ranges [][2]uint64
 		lineReader *dwarf.LineReader
 		lineEntry *dwarf.LineEntry
@@ -60,7 +86,7 @@ func analyze(execfile string) (*BI, error) {
 	}
 	dwarfReader = dwarfData.Reader()
 
-	bi = &BI{Sources: make(map[string]map[int]uint64), Functions: make(map[string]uint64)}
+	bi = &BI{Sources: make(map[string]map[int]uint64)}
 	for {
 		if curEntry, err = dwarfReader.Next(); err != nil{
 			return nil, err
@@ -69,7 +95,11 @@ func analyze(execfile string) (*BI, error) {
 			break
 		}
 
+
 		if curEntry.Tag == dwarf.TagCompileUnit {
+			curCompileUnit = &CompileUnit{}
+			bi.CompileUnits = append(bi.CompileUnits, curCompileUnit)
+
 			fields := curEntry.Field
 			logger.Debug("|================= START ===========================|")
 			for _, field := range fields {
@@ -118,10 +148,60 @@ func analyze(execfile string) (*BI, error) {
 					}
 				}
 			}
+
+			curCompileUnitEntry = curEntry
+		}
+
+		if curEntry.Tag == dwarf.TagSubprogram {
+			curFunction = &Function{}
+			curCompileUnit.functions = append(curCompileUnit.functions, curFunction)
+			curFunction.cu = curCompileUnit
+			bi.Functions = append(bi.Functions, curFunction)
+
+			fields := curEntry.Field
+			logger.Debug("|================= START ===========================|")
+			for _, field := range fields {
+				switch field.Attr {
+				case dwarf.AttrName:
+					if val, ok := field.Val.(string); ok {
+						curFunction.name = val
+					}
+				case dwarf.AttrLowpc:
+					if val, ok := field.Val.(uint64); ok {
+						curFunction.lowpc = val
+					}
+				case dwarf.AttrHighpc:
+					if val, ok := field.Val.(uint64); ok {
+						curFunction.highpc = val
+					}
+				case dwarf.AttrFrameBase:
+					if val, ok := field.Val.([]byte); ok {
+						curFunction.frameBase = val
+					}
+				case dwarf.AttrDeclFile:
+					if val, ok := field.Val.(int64); ok {
+						curFunction.declFile = val
+					}
+				case dwarf.AttrExternal:
+					if val, ok := field.Val.(bool); ok {
+						curFunction.external = val
+					}
+				default:
+					logger.Debug("analyze:TagSubprogram unknow attr", zap.Any("field",field))
+				}
+				// for debug log
+				logger.Debug("TagSubprogram",
+					zap.String("Attr", field.Attr.String()),
+					zap.String("Val", fmt.Sprintf("%v", field.Val)),
+					zap.String("Class", fmt.Sprintf("%s", field.Class)))
+			}
+			logger.Debug("|================== END ============================|")
+
+			curSubProgramEntry = curEntry
 		}
 	}
 
-	// debug log
+	// debug source log
 	for file, mp := range bi.Sources {
 		for line, addr := range mp {
 			logger.Debug("bi",
@@ -131,13 +211,10 @@ func analyze(execfile string) (*BI, error) {
 
 	_ = debugLineMapTableBytes
 	_ = debugInfoBytes
+	_ = curSubProgramEntry
+	_ = curCompileUnitEntry
 
 	return bi, nil
-}
-
-type BI struct {
-	Sources map[string]map[int]uint64
-	Functions map[string]uint64
 }
 
 func parseLoc(loc string) (string, int, error) {
@@ -205,7 +282,7 @@ func (b *BI) pcTofileLine(pc uint64)(string, int, error) {
 	}
 
 	if !(rangeMax.existedPc && rangeMax.existedPc) {
-		return "", 0, errors.New("invalid input")
+		return "", 0, errors.New("invalid register pc")
 	}
 
 	if (rangeMax.pc - pc) > (pc - rangeMin.pc) {
