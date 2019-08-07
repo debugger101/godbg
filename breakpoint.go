@@ -11,6 +11,7 @@ type BInfo struct {
 	original []byte
 	filename string
 	lineno int
+	pc uint64
 }
 
 type BP struct {
@@ -74,7 +75,7 @@ func (bp* BP)SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error) 
 		return nil, err
 	}
 
-	bInfo := &BInfo{original: original, filename: fullfilename, lineno: lineno}
+	bInfo := &BInfo{original: original, filename: fullfilename, lineno: lineno, pc: pc}
 	bp.infos = append(bp.infos, bInfo)
 
 	return bInfo, nil

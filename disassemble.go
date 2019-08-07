@@ -18,6 +18,7 @@ func disassemble(lowpc uint64, highpc uint64) ([][]byte, []uint64,[]x86asm.Inst,
 		n int
 		err error
 		asmInst x86asm.Inst
+		bpMap map[uint64]*BInfo
 	)
 	if n, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(lowpc), mem); err != nil {
 		return nil, nil, nil, err
@@ -28,14 +29,29 @@ func disassemble(lowpc uint64, highpc uint64) ([][]byte, []uint64,[]x86asm.Inst,
 	pcs := make([]uint64, 0, len(mem))
 	memSlice := make([][]byte, 0, len(mem))
 
+	// Optimized display disassemble code where contain breakpoint
+	bpMap = make(map[uint64]*BInfo, len(bp.infos))
+	for _, info := range bp.infos {
+		bpMap[info.pc] = info
+	}
+
 	curPc := lowpc
 	for len(mem) > 0 {
 		if asmInst, err = x86asm.Decode(mem, 64); err != nil {
 			return nil, nil, nil, err
 		}
+		// Optimized display disassemble code where contain breakpoint
+		if bpMap[curPc] != nil {
+			curbp := bpMap[curPc]
+			if asmInst, err = x86asm.Decode(curbp.original, 64);err != nil {
+				return nil, nil, nil, err
+			}
+			memSlice = append(memSlice, curbp.original)
+		} else {
+			memSlice = append(memSlice, mem[:asmInst.Len])
+		}
 		amsInsts = append(amsInsts, asmInst)
 		pcs = append(pcs, curPc)
-		memSlice = append(memSlice, mem[:asmInst.Len])
 
 		mem = mem[asmInst.Len:]
 		curPc += uint64(asmInst.Len)
@@ -76,6 +92,8 @@ func listDisassembleByPtracePc() error {
 		return err
 	}
 	out := make([]string, 0, len(amsInsts))
+
+
 	for i, amsInst := range amsInsts {
 		curpc := pcs[i]
 		if filename, lineno, err = bi.pcTofileLine(pc); err != nil {
