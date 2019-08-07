@@ -125,7 +125,7 @@ func executor(input string) {
 	case 'd':
 		sps := strings.Split(input, " ")
 		if len(sps) == 1 && (sps[0] == "disass" || sps[0] == "disassemble") {
-			if _, err := disassembleByPtracePc(); err != nil {
+			if err := listDisassembleByPtracePc(); err != nil {
 				printErr(err)
 				return
 			}
