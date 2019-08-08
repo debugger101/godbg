@@ -20,6 +20,11 @@ func executor(input string) {
 	switch fs {
 	case 'q':
 		if input == "q" || input == "quit"{
+			if cmd.Process != nil {
+				if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
+					fmt.Println(err)
+				}
+			}
 			os.Exit(0)
 		}
 	case 'b':
