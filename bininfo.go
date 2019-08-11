@@ -27,7 +27,7 @@ type Function struct {
 }
 
 type BI struct {
-	Sources map[string]map[int]uint64
+	Sources map[string]map[int][]*dwarf.LineEntry
 	Functions []*Function
 	CompileUnits []*CompileUnit
 }
@@ -86,7 +86,7 @@ func analyze(execfile string) (*BI, error) {
 	}
 	dwarfReader = dwarfData.Reader()
 
-	bi = &BI{Sources: make(map[string]map[int]uint64)}
+	bi = &BI{Sources: make(map[string]map[int][]*dwarf.LineEntry)}
 	for {
 		if curEntry, err = dwarfReader.Next(); err != nil{
 			return nil, err
@@ -140,12 +140,11 @@ func analyze(execfile string) (*BI, error) {
 				logger.Debug("cu:" + cuname, zap.Any("lineEntry", lineEntry))
 				if lineEntry.File != nil {
 					if bi.Sources[lineEntry.File.Name] == nil {
-						bi.Sources[lineEntry.File.Name] = make(map[int]uint64)
+						bi.Sources[lineEntry.File.Name] = make(map[int][]*dwarf.LineEntry)
 					}
-
-					if _, ok := bi.Sources[lineEntry.File.Name][lineEntry.Line]; !ok {
-						bi.Sources[lineEntry.File.Name][lineEntry.Line] = lineEntry.Address
-					}
+					copyLineEntry := &dwarf.LineEntry{}
+					*copyLineEntry = *lineEntry
+					bi.Sources[lineEntry.File.Name][lineEntry.Line] = append(bi.Sources[lineEntry.File.Name][lineEntry.Line], copyLineEntry)
 				}
 			}
 
@@ -203,9 +202,11 @@ func analyze(execfile string) (*BI, error) {
 
 	// debug source log
 	for file, mp := range bi.Sources {
-		for line, addr := range mp {
-			logger.Debug("bi",
-				zap.String("file", file), zap.Int("line", line), zap.Uint64("addr", addr))
+		for line, lineEntryArray := range mp {
+			for _, lineEntry := range lineEntryArray {
+				logger.Debug("bi",
+					zap.String("file", file), zap.Int("line", line), zap.Uint64("addr", lineEntry.Address))
+			}
 		}
 	}
 
@@ -239,10 +240,36 @@ func (b *BI) locToPc(loc string) (uint64, error){
 }
 
 func (b *BI) fileLineToPc(filename string, lineno int) (uint64, error) {
-	if b.Sources[filename] == nil || b.Sources[filename][lineno] == 0 {
+	if b.Sources[filename] == nil || b.Sources[filename][lineno] == nil || len(b.Sources[filename][lineno]) == 0{
 		return 0, NotFoundSourceLineErr
 	}
-	return b.Sources[filename][lineno], nil
+	return b.Sources[filename][lineno][0].Address, nil
+}
+
+func (b *BI) fileLineToPcForBreakPoint(filename string, lineno int) (uint64, error) {
+	if b.Sources[filename] == nil || b.Sources[filename][lineno] == nil || len(b.Sources[filename][lineno]) == 0{
+		return 0, NotFoundSourceLineErr
+	}
+	lineEntryArray := b.Sources[filename][lineno]
+	for _, v := range lineEntryArray {
+		if v.PrologueEnd {
+			return v.Address, nil
+		}
+	}
+	addr := uint64(0)
+	for i, v := range lineEntryArray {
+		if i == 0 {
+			addr = v.Address
+		} else {
+			if addr > v.Address {
+				addr = v.Address
+			}
+		}
+	}
+	if addr == 0 {
+		return 0, NotFoundSourceLineErr
+	}
+	return addr, nil
 }
 
 func (b *BI) pcTofileLine(pc uint64)(string, int, error) {
@@ -262,32 +289,26 @@ func (b *BI) pcTofileLine(pc uint64)(string, int, error) {
 
 
 	for filename, filenameMp := range b.Sources {
-		for lineno, addr := range filenameMp {
-			if addr == pc {
-				return filename, lineno, nil
-			}
-			if addr <= pc && (!rangeMin.existedPc || addr > rangeMin.pc) {
-				rangeMin.pc = addr
-				rangeMin.existedPc = true
-				rangeMin.filename = filename
-				rangeMin.lineno = lineno
-			}
-			if pc < addr && (!rangeMax.existedPc || addr < rangeMax.pc) {
-				rangeMax.pc = addr
-				rangeMax.existedPc = true
-				rangeMax.filename = filename
-				rangeMax.lineno = lineno
+		for lineno, lineEntryArray := range filenameMp {
+			for _, lineEntry := range lineEntryArray {
+				if lineEntry.Address == pc {
+					return filename, lineno, nil
+				}
+				if lineEntry.Address <= pc && (!rangeMin.existedPc || lineEntry.Address > rangeMin.pc) {
+					rangeMin.pc = lineEntry.Address
+					rangeMin.existedPc = true
+					rangeMin.filename = filename
+					rangeMin.lineno = lineno
+				}
+				if pc < lineEntry.Address && (!rangeMax.existedPc || lineEntry.Address < rangeMax.pc) {
+					rangeMax.pc = lineEntry.Address
+					rangeMax.existedPc = true
+					rangeMax.filename = filename
+					rangeMax.lineno = lineno
+				}
 			}
 		}
 	}
 
-	if !(rangeMax.existedPc && rangeMax.existedPc) {
-		return "", 0, errors.New("invalid register pc")
-	}
-
-	if (rangeMax.pc - pc) > (pc - rangeMin.pc) {
-		return rangeMin.filename, rangeMin.lineno, nil
-	}
-
-	return rangeMax.filename, rangeMax.lineno, nil
+	return rangeMin.filename, rangeMin.lineno, nil
 }

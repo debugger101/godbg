@@ -87,7 +87,7 @@ func (bp* BP)SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error) 
 	}
 
 	fullfilename := path.Join(curDir, filename)
-	pc, err := bi.fileLineToPc(fullfilename, lineno)
+	pc, err := bi.fileLineToPcForBreakPoint(fullfilename, lineno)
 	if err != nil {
 		logger.Error("SetFileLineBreakPoint:fileLineToPc",
 			zap.Error(err),
@@ -230,6 +230,10 @@ func (bp *BP)singleStepInstructionWithBreakpointCheck() (bool, error) {
 
 	if interBpInfo == nil || pc - 1 != interBpInfo.pc {
 		return false, nil
+	} else {
+		if err = setPcRegister(pc - 1); err != nil {
+			return true, err
+		}
 	}
 
 	return true, nil
