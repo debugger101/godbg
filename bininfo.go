@@ -266,7 +266,7 @@ func (b *BI) pcTofileLine(pc uint64)(string, int, error) {
 			if addr == pc {
 				return filename, lineno, nil
 			}
-			if addr < pc && (!rangeMin.existedPc || addr > rangeMin.pc) {
+			if addr <= pc && (!rangeMin.existedPc || addr > rangeMin.pc) {
 				rangeMin.pc = addr
 				rangeMin.existedPc = true
 				rangeMin.filename = filename

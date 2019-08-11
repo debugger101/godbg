@@ -21,13 +21,14 @@ func disassemble(lowpc uint64, highpc uint64) (map[uint64]bool, [][]byte, []uint
 		asmInst x86asm.Inst
 		bpMap map[uint64]*BInfo
 		pcMap map[uint64]bool
+		curMem []byte
 	)
 	if n, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(lowpc), mem); err != nil {
 		return nil, nil, nil, nil, err
 	}
 	mem = mem[:n]
 
-	amsInsts := make([]x86asm.Inst, 0, len(mem))
+	asmInsts := make([]x86asm.Inst, 0, len(mem))
 	pcs := make([]uint64, 0, len(mem))
 	memSlice := make([][]byte, 0, len(mem))
 
@@ -41,30 +42,28 @@ func disassemble(lowpc uint64, highpc uint64) (map[uint64]bool, [][]byte, []uint
 
 	curPc := lowpc
 	for len(mem) > 0 {
+		// Optimized display disassemble code where contain breakpoint
+		if curbp, ok := bpMap[curPc]; ok {
+			logger.Debug("disassemble", zap.Any("hit bp", curbp))
+			copy(mem, curbp.original)
+		}
+
 		if asmInst, err = x86asm.Decode(mem, 64); err != nil {
-			logger.Error("disassemble", zap.Error(err), zap.Uint64("pc", curPc))
+			logger.Error("disassemble", zap.Error(err), zap.Uint64("pc", curPc), zap.ByteString("mem[0]", mem[:1]))
 			return nil, nil, nil, nil, err
 		}
 
-		// Optimized display disassemble code where contain breakpoint
-		if bpMap[curPc] != nil {
-			curbp := bpMap[curPc]
-			if asmInst, err = x86asm.Decode(curbp.original, 64);err != nil {
-				logger.Error("disassemble", zap.Error(err), zap.Uint64("pc", curPc))
-				return nil, nil, nil, nil, err
-			}
-			memSlice = append(memSlice, curbp.original)
-		} else {
-			memSlice = append(memSlice, mem[:asmInst.Len])
-		}
-		amsInsts = append(amsInsts, asmInst)
+		curMem = mem[:asmInst.Len]
+		memSlice = append(memSlice, curMem)
+		asmInsts = append(asmInsts, asmInst)
 		pcs = append(pcs, curPc)
+		logger.Debug("disassemble signle Inst",zap.Uint64("pc", curPc), zap.String("inst", asmInst.String()))
 
 		mem = mem[asmInst.Len:]
 		curPc += uint64(asmInst.Len)
 	}
 
-	return pcMap, memSlice, pcs, amsInsts, nil
+	return pcMap, memSlice, pcs, asmInsts, nil
 }
 
 // not considered inline function
@@ -101,10 +100,10 @@ func listDisassembleByPtracePc() error {
 	}
 	out := make([]string, 0, len(amsInsts))
 
-
+	fmt.Printf("current process pc = %d\n", pc)
 	for i, amsInst := range amsInsts {
 		curpc := pcs[i]
-		if filename, lineno, err = bi.pcTofileLine(pc); err != nil {
+		if filename, lineno, err = bi.pcTofileLine(curpc); err != nil {
 			return err
 		}
 
@@ -112,13 +111,13 @@ func listDisassembleByPtracePc() error {
 		if pcBpMap[curpc] {
 			bpFlag ="."
 		}
-
-		if pc == curpc {
-			out = append(out, fmt.Sprintf("%s==> %s:%-7d %-7d %-20x %s\n",bpFlag, path.Base(filename), lineno, curpc, mems[i], amsInst.String()))
-
+		if i < len(pcs) - 1 && pcs[i] <= pc && pc < pcs[i + 1] {
+			bpFlag += "===> "
 		} else {
-			out = append(out, fmt.Sprintf("%s    %s:%-7d %-7d %-20x %s\n",bpFlag, path.Base(filename), lineno, curpc, mems[i], amsInst.String()))
+			bpFlag += "     "
 		}
+
+		out = append(out, fmt.Sprintf("%s%s:%-7d %-7d %-20x %s\n",bpFlag, path.Base(filename), lineno, curpc, mems[i], amsInst.String()))
 	}
 	fmt.Println(strings.Join(out, ""))
 	return nil

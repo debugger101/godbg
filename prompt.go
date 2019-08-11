@@ -51,6 +51,30 @@ func executor(input string) {
 			}
 			return
 		}
+		if len(sps) == 1 && (sps[0] == "bl") {
+			count := 0
+			for _, v := range bp.infos {
+				if v.kind == USERBPTYPE {
+					count++
+					fmt.Printf("%-2d. %s:%d, pc %d\n", count, v.filename, v.lineno, v.pc)
+				}
+			}
+			if count == 0 {
+				fmt.Printf("there is no breakpoint\n")
+			}
+			return
+		}
+		if len(sps) == 2 && (sps[0] == "bl" && sps[1] == "all") {
+			count := 0
+			for _, v := range bp.infos {
+				count++
+				fmt.Printf("%-2d. %s:%d, pc %d, type %s\n", count, v.filename, v.lineno, v.pc, v.kind.String())
+			}
+			if count == 0 {
+				fmt.Printf("there is no breakpoint\n")
+			}
+			return
+		}
 	case 'c':
 		sps := strings.Split(input, " ")
 		if len(sps) == 1 && (sps[0] == "c" || sps[0] == "continue") {
@@ -59,28 +83,42 @@ func executor(input string) {
 				return
 			}
 
-			if err := bp.Continue(); err != nil {
+			if ok, err := bp.singleStepInstructionWithBreakpointCheck(); err != nil {
 				printErr(err)
 				return
+			} else if ok {
+				if err := bp.Continue(); err != nil {
+					printErr(err)
+					return
+				}
+				var s syscall.WaitStatus
+				wpid, err := syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil)
+				if err != nil {
+					printErr(err)
+					return
+				}
+				status := (syscall.WaitStatus)(s)
+				if status.Exited() {
+					// TODO
+					if cmd.Process != nil && wpid == cmd.Process.Pid {
+						printExit0(wpid)
+					} else {
+						printExit0(wpid)
+					}
+					cmd.Process = nil
+					return
+				}
 			}
 
-			var s syscall.WaitStatus
-			wpid, err := syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil)
-			if err != nil {
+			var (
+				pc uint64
+				err error
+			)
+			if pc, err = getPtracePc(); err != nil {
 				printErr(err)
 				return
 			}
-			status := (syscall.WaitStatus)(s)
-			if status.Exited() {
-				// TODO
-				if cmd.Process != nil && wpid == cmd.Process.Pid {
-					printExit0(wpid)
-				} else {
-					printExit0(wpid)
-				}
-				cmd.Process = nil
-				return
-			}
+			fmt.Printf("current process pc = %d\n", pc)
 			if err = listFileLineByPtracePc(6); err != nil {
 				printErr(err)
 				return

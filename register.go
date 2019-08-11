@@ -21,3 +21,15 @@ func getPtracePc() (uint64, error) {
 	}
 	return prs.PC(), nil
 }
+
+func setPcRegister(pc uint64) error {
+	var (
+		prs syscall.PtraceRegs
+		err error
+	)
+	if prs, err = getRegisters(); err != nil {
+		return err
+	}
+	prs.SetPC(pc)
+	return syscall.PtraceSetRegs(cmd.Process.Pid, &prs)
+}
