@@ -1,10 +1,8 @@
 package log
 
 import (
-	"fmt"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"net/http"
 	"os"
 	"strings"
 )
@@ -36,7 +34,7 @@ func init() {
 	}
 
 
-	http.HandleFunc("/debug", func(w http.ResponseWriter, r *http.Request) {
+	/*http.HandleFunc("/debug", func(w http.ResponseWriter, r *http.Request) {
 		lv := r.PostFormValue("level")
 		if lv == "" {
 			fmt.Fprintf(w, "%s\n", level.String())
@@ -52,7 +50,7 @@ func init() {
 		if err := http.ListenAndServe(":9090", nil); err != nil {
 			panic(err)
 		}
-	}()
+	}()*/
 
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderCfg),
