@@ -4,15 +4,20 @@ import (
 	"github.com/c-bata/go-prompt"
 	"github.com/chainhelen/godbg/log"
 	"go.uber.org/zap"
+	"io"
 	"os"
 	"os/exec"
 )
 
-var logger = log.Log
-var bp = &BP{}
 var (
+	bp = &BP{}
+	logger = log.Log
 	bi *BI
 	cmd *exec.Cmd
+
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
 )
 
 func main() {
@@ -22,6 +27,9 @@ func main() {
 		err      error
 		p *prompt.Prompt
 	)
+	stdin = os.Stdin
+	stdout = os.Stdout
+	stderr = os.Stderr
 
 	if err = checkArgs(); err != nil {
 		logger.Error(err.Error(), zap.String("stage","checkArgs"), zap.Strings("args", os.Args))

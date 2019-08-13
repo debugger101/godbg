@@ -100,7 +100,7 @@ func listDisassembleByPtracePc() error {
 	}
 	out := make([]string, 0, len(amsInsts))
 
-	fmt.Printf("current process pc = %d\n", pc)
+	fmt.Fprintf(stdout,"current process pc = %d\n", pc)
 	for i, amsInst := range amsInsts {
 		curpc := pcs[i]
 		if filename, lineno, err = bi.pcTofileLine(curpc); err != nil {
@@ -119,6 +119,6 @@ func listDisassembleByPtracePc() error {
 
 		out = append(out, fmt.Sprintf("%s%s:%-7d %-7d %-20x %s\n",bpFlag, path.Base(filename), lineno, curpc, mems[i], amsInst.String()))
 	}
-	fmt.Println(strings.Join(out, ""))
+	fmt.Fprintln(stdout, strings.Join(out, ""))
 	return nil
 }

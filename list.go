@@ -69,7 +69,7 @@ func listFileLine(filename string, lineno int, rangeline int) error{
 		}
 	}
 
-	fmt.Println(strings.Join(listFileLineBytesSlice, ""))
+	fmt.Fprintln(stdout, strings.Join(listFileLineBytesSlice, ""))
 
 	return nil
 }

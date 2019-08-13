@@ -10,30 +10,30 @@ var HasExistedBreakPointErr = errors.New("this breakpoint has existed")
 var NoProcessRuning = errors.New("there is no process running")
 
 func printHelper() {
-	fmt.Printf("%s\n", "Usage:\n\tJust like ./godgb debug main.go")
+	fmt.Fprintf(stderr, "%s\n", "Usage:\n\tJust like ./godgb debug main.go")
 }
 
 func printUnsupportCmd(cmd string) {
-	fmt.Printf("unsupport cmd `%s`\n", cmd)
+	fmt.Fprintf(stderr,"unsupport cmd `%s`\n", cmd)
 }
 
 func printHasExistedBreakPoint(place string) {
-	fmt.Printf("existed breakpoint %s\n", place)
+	fmt.Fprintf(stderr,"existed breakpoint %s\n", place)
 }
 
 func printNotFoundSourceLineErr(place string) {
-	fmt.Printf("can't find this source line %s\n", place)
+	fmt.Fprintf(stderr, "can't find this source line %s\n", place)
 }
 
 func printErr(err error) {
-	fmt.Printf("%s\n", err.Error())
+	fmt.Fprintf(stderr,"%s\n", err.Error())
 }
 
 func printNoProcessErr() {
-	fmt.Printf("%s\n", NoProcessRuning.Error())
+	fmt.Fprintf(stderr,"%s\n", NoProcessRuning.Error())
 }
 
 func printExit0(opid int) {
-	fmt.Printf("Process %d has exited with status 0\n", opid)
+	fmt.Fprintf(stderr,"Process %d has exited with status 0\n", opid)
 
 }

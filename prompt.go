@@ -22,7 +22,7 @@ func executor(input string) {
 		if input == "q" || input == "quit"{
 			if cmd.Process != nil {
 				if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
-					fmt.Println(err)
+					printErr(err)
 				}
 			}
 			os.Exit(0)
@@ -47,7 +47,7 @@ func executor(input string) {
 				printErr(err)
 				return
 			} else {
-				fmt.Printf("godbg add %s:%d breakpoint successfully\n",bInfo.filename, bInfo.lineno)
+				fmt.Fprintf(stdout,"godbg add %s:%d breakpoint successfully\n",bInfo.filename, bInfo.lineno)
 			}
 			return
 		}
@@ -56,11 +56,11 @@ func executor(input string) {
 			for _, v := range bp.infos {
 				if v.kind == USERBPTYPE {
 					count++
-					fmt.Printf("%-2d. %s:%d, pc %d\n", count, v.filename, v.lineno, v.pc)
+					fmt.Fprintf(stdout,"%-2d. %s:%d, pc %d\n", count, v.filename, v.lineno, v.pc)
 				}
 			}
 			if count == 0 {
-				fmt.Printf("there is no breakpoint\n")
+				fmt.Fprintf(stdout,"there is no breakpoint\n")
 			}
 			return
 		}
@@ -68,10 +68,10 @@ func executor(input string) {
 			count := 0
 			for _, v := range bp.infos {
 				count++
-				fmt.Printf("%-2d. %s:%d, pc %d, type %s\n", count, v.filename, v.lineno, v.pc, v.kind.String())
+				fmt.Fprintf(stdout,"%-2d. %s:%d, pc %d, type %s\n", count, v.filename, v.lineno, v.pc, v.kind.String())
 			}
 			if count == 0 {
-				fmt.Printf("there is no breakpoint\n")
+				fmt.Fprintf(stdout,"there is no breakpoint\n")
 			}
 			return
 		}
@@ -118,7 +118,7 @@ func executor(input string) {
 				printErr(err)
 				return
 			}
-			fmt.Printf("current process pc = %d\n", pc)
+			fmt.Fprintf(stdout,"current process pc = %d\n", pc)
 			if err = listFileLineByPtracePc(6); err != nil {
 				printErr(err)
 				return
