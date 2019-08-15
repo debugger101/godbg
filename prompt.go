@@ -22,8 +22,11 @@ func executor(input string) {
 		if input == "q" || input == "quit"{
 			if cmd.Process != nil {
 				if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
-					printErr(err)
+					// printErr(err)
 				}
+			}
+			if os.Getenv("GODBG_TEST") != "" {
+				return
 			}
 			os.Exit(0)
 		}
