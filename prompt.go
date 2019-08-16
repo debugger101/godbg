@@ -168,6 +168,34 @@ func executor(input string) {
 			}
 			return
 		}
+	case 'r':
+		sps := strings.Split(input, " ")
+		if len(sps) == 1 && (sps[0] == "r" || sps[0] == "restart") {
+			pid := 0
+			if cmd.Process != nil {
+				pid = cmd.Process.Pid
+				if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGSTOP); err != nil {
+					printErr(err)
+					return
+				}
+			}
+			if pid != 0 {
+				fmt.Fprintf(stdout, "  stop  old process pid %d\n", pid)
+			}
+			var err error
+			if cmd, err = runexec(execfile); err != nil {
+				printErr(err)
+				logger.Error(err.Error(), zap.String("stage", "restart:runexec"), zap.String("execfile", execfile))
+				return
+			}
+			if err = bp.SetBpWhenRestart(); err != nil {
+				printErr(err)
+				logger.Error(err.Error(), zap.String("stage", "restart:setbp"), zap.String("execfile", execfile))
+				return
+			}
+			fmt.Fprintf(stdout, "restart new process pid %d \n", cmd.Process.Pid)
+			return
+		}
 	case 'd':
 		sps := strings.Split(input, " ")
 		if len(sps) == 1 && (sps[0] == "disass" || sps[0] == "disassemble") {

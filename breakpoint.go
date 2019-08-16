@@ -248,3 +248,17 @@ func (bp *BP)clearInternalBreakPoint(pc uint64) {
 	}
 	bp.infos = infos
 }
+
+func (bp *BP)SetBpWhenRestart() error {
+	for _, v := range bp.infos {
+		if v.kind == INTERNALBPTYPE {
+			bp.clearInternalBreakPoint(v.pc)
+		}
+		if v.kind == USERBPTYPE {
+			if err := bp.enableBreakPoint(v); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

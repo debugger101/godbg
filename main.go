@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/c-bata/go-prompt"
 	"github.com/chainhelen/godbg/log"
 	"go.uber.org/zap"
@@ -14,6 +15,7 @@ var (
 	logger = log.Log
 	bi *BI
 	cmd *exec.Cmd
+	execfile string
 
 	stdin  io.Reader
 	stdout io.Writer
@@ -23,7 +25,6 @@ var (
 func main() {
 	var (
 		filename string
-		execfile string
 		err      error
 		p *prompt.Prompt
 	)
@@ -67,6 +68,7 @@ func main() {
 		printHelper()
 		return
 	}
+	fmt.Fprintf(stdout, "trace cur process pid %d\n",cmd.Process.Pid)
 
 	// step 5, run prompt. `executor` handle all input
 	p = prompt.New(
