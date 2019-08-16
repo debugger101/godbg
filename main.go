@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/c-bata/go-prompt"
+	"github.com/c-bata/go-prompt/completer"
 	"github.com/chainhelen/godbg/log"
 	"go.uber.org/zap"
 	"io"
@@ -77,6 +78,7 @@ func main() {
 		prompt.OptionTitle("Simplified golang debugger"),
 		prompt.OptionPrefix("(godbg) "),
 		prompt.OptionInputTextColor(prompt.Yellow),
+		prompt.OptionCompletionWordSeparator(completer.FilePathCompletionSeparator),
 	)
 	p.Run()
 }

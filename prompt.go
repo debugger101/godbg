@@ -5,6 +5,7 @@ import (
 	"github.com/c-bata/go-prompt"
 	"go.uber.org/zap"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"syscall"
@@ -210,6 +211,36 @@ func executor(input string) {
 }
 
 func complete(docs prompt.Document) []prompt.Suggest {
-	_ = docs
-	return nil
+	sps := strings.Split(docs.Text, " ")
+
+	s := make([]prompt.Suggest, 0)
+
+	curWd, _ := os.Getwd()
+
+	if len(sps) == 2 {
+		if sps[0] == "b" || sps[0] == "break" || sps[0] == "l" || sps[0] == "list" {
+			for filename := range bi.Sources {
+				if strings.HasPrefix(filename, sps[1]) {
+					if filename[0] == '/' {
+						filename = filename[1:]
+					}
+					s = append(s, prompt.Suggest{Text: filename, Description:""})
+				} else {
+
+					inputPrefix := sps[1]
+					if inputPrefixFilename := path.Join(curWd, inputPrefix); strings.HasPrefix(filename, inputPrefixFilename) {
+						if len(inputPrefix) >= 2 && inputPrefix[:2] == "./" {
+							inputPrefix = inputPrefix[2:]
+						}
+						needComplete := filename[len(inputPrefixFilename):]
+						s = append(s, prompt.Suggest{Text: inputPrefix + needComplete, Description: ""})
+					}
+				}
+				if len(s) >= 30 {
+					return s
+				}
+			}
+		}
+	}
+	return s
 }
