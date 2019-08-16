@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"go.uber.org/zap"
 	"golang.org/x/arch/x86/x86asm"
 	"os"
@@ -167,6 +168,48 @@ func (bp *BP)getSingleMemInst(pc uint64) (x86asm.Inst, error){
 		return x86asm.Inst{}, err
 	}
 	return inst, nil
+}
+
+/* version 2 */
+func (bp *BP)singleStepInstructionWithBreakpointCheck_v2() error {
+	var (
+		pc uint64
+		err error
+		info *BInfo
+		ok bool
+	)
+
+	if pc, err = getPtracePc(); err != nil {
+		return err
+	}
+	pc = pc - 1
+	if info, ok = bp.findBreakPoint(pc); !ok {
+		return nil
+	}
+	if err = bp.disableBreakPoint(info); err !=nil {
+		return  err
+	}
+	defer bp.enableBreakPoint(info)
+
+	if err = setPcRegister(pc); err != nil {
+		return err
+	}
+
+	if err = syscall.PtraceSingleStep(cmd.Process.Pid); err != nil {
+		return err
+	}
+	var s syscall.WaitStatus
+	if _, err = syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil); err != nil {
+		return err
+	}
+	if s.Exited() {
+		return nil
+	}
+	if s.StopSignal() == syscall.SIGTRAP {
+		return nil
+	}
+
+	return fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal())
 }
 
 func (bp *BP)singleStepInstructionWithBreakpointCheck() (bool, error) {

@@ -87,6 +87,8 @@ func executor(input string) {
 				return
 			}
 
+			/*
+			version 1
 			if ok, err := bp.singleStepInstructionWithBreakpointCheck(); err != nil {
 				printErr(err)
 				return
@@ -112,11 +114,38 @@ func executor(input string) {
 					cmd.Process = nil
 					return
 				}
+			}*/
+
+			/* version 2 */
+			if err := bp.singleStepInstructionWithBreakpointCheck_v2(); err != nil {
+				printErr(err)
+				return
 			}
+			if err := bp.Continue(); err != nil {
+				printErr(err)
+				return
+			}
+			var s syscall.WaitStatus
+			wpid, err := syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil)
+			if err != nil {
+				printErr(err)
+				return
+			}
+
+			if s.Exited() {
+				printExit0(wpid)
+				return
+			}
+
+			if s.StopSignal() != syscall.SIGTRAP {
+				cmd.Process = nil
+				fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal())
+				return
+			}
+
 
 			var (
 				pc uint64
-				err error
 			)
 			if pc, err = getPtracePc(); err != nil {
 				printErr(err)
