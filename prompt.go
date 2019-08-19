@@ -55,6 +55,40 @@ func executor(input string) {
 			}
 			return
 		}
+		if len(sps) == 2 && (sps[0] == "bc" || sps[0] == "bclear") {
+
+			if sps[1] == "all" {
+				tmp := make([]*BInfo, 0, len(bp.infos))
+				for _, v := range bp.infos {
+					if v.kind == USERBPTYPE {
+						bp.disableBreakPoint(v)
+					} else {
+						tmp = append(tmp, v)
+					}
+				}
+				bp.infos = tmp
+				return
+			}
+
+			if needClearIndex, err := strconv.Atoi(sps[1]); err == nil {
+				if needClearIndex > len(bp.infos) {
+					printErr(fmt.Errorf("can't find breakpoint index %d", needClearIndex))
+				}
+				count := 0
+				for i, v := range bp.infos {
+					if v.kind == USERBPTYPE {
+						count++
+						if count == needClearIndex {
+							bp.disableBreakPoint(v)
+							bp.infos = append(bp.infos[:i], bp.infos[(i + 1):len(bp.infos)]...)
+							return
+						}
+					}
+				}
+				printErr(fmt.Errorf("can't find breakpoint index %d", needClearIndex))
+				return
+			}
+		}
 		if len(sps) == 1 && (sps[0] == "bl") {
 			count := 0
 			for _, v := range bp.infos {
