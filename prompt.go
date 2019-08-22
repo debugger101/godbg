@@ -81,6 +81,7 @@ func executor(input string) {
 						if count == needClearIndex {
 							bp.disableBreakPoint(v)
 							bp.infos = append(bp.infos[:i], bp.infos[(i + 1):len(bp.infos)]...)
+							fmt.Fprintf(stdout, "clear breakpoint %d successfully, resort breakpoint again\n", needClearIndex)
 							return
 						}
 					}

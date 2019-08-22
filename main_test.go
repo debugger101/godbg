@@ -300,3 +300,44 @@ func TestForExpressionContinue(t *testing.T) {
 	executor("q")
 	clear_variable()
 }
+
+func TestBreakClearContinue(t *testing.T) {
+	var (
+		execfile string
+		err error
+		g = NewGomegaWithT(t)
+	)
+	outw, errw := make_out_err()
+
+	execfile, err = build_run_debug("./test_file/t2.go")
+	g.Expect(err).Should(BeNil())
+	defer os.Remove(execfile)
+	pid := cmd.Process.Pid
+
+	executor("b ./test_file/t2.go:7")
+
+	g.Expect(outw.String()).Should(ContainSubstring("godbg add ./test_file/t2.go:7 breakpoint successfully"))
+	g.Expect(errw.String()).Should(Equal(""))
+
+	executor("c")
+	g.Expect(outw.String()).Should(ContainSubstring("==>      7: 		fmt.Println(i)"))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("bc 1")
+	g.Expect(outw.String()).Should(ContainSubstring("clear breakpoint 1 successfully, resort breakpoint again"))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("bl")
+	g.Expect(outw.String()).Should(ContainSubstring("there is no breakpoint"))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("c")
+	g.Expect(outw.String()).Should(Equal(""))
+	g.Expect(errw.String()).Should(MatchRegexp("Process %d has exited with status 0", pid))
+
+	executor("q")
+	clear_variable()
+}
