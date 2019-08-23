@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
+	"golang.org/x/arch/x86/x86asm"
 	"io"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 type CompileUnit struct {
@@ -323,4 +325,21 @@ func (b *BI) pcTofileLine(pc uint64)(string, int, error) {
 	}
 
 	return rangeMin.filename, rangeMin.lineno, nil
+}
+
+func (bi *BI)getSingleMemInst(pc uint64) (x86asm.Inst, error){
+	var (
+		mem []byte
+		err error
+		inst x86asm.Inst
+	)
+
+	mem = make([]byte, 100)
+	if _, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(pc), mem); err != nil {
+		return x86asm.Inst{}, err
+	}
+	if inst ,err = x86asm.Decode(mem, 64); err != nil {
+		return x86asm.Inst{}, err
+	}
+	return inst, nil
 }

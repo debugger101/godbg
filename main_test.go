@@ -15,14 +15,14 @@ func clear_variable() {
 	bi = nil
 	cmd = nil
 
-	stdin  = os.Stdin
+	stdin = os.Stdin
 	stdout = os.Stdout
 	stderr = os.Stderr
 }
 
 func build_run_debug(filename string) (string, error) {
 	var (
-		dir string
+		dir      string
 		execfile string
 		err      error
 	)
@@ -39,7 +39,7 @@ func build_run_debug(filename string) (string, error) {
 	}
 
 	// step 3, analyze executable file; The most import places are "_debug_info", "_debug_line"
-	if bi, err = analyze(execfile); err != nil{
+	if bi, err = analyze(execfile); err != nil {
 		return execfile, err
 	}
 
@@ -48,13 +48,13 @@ func build_run_debug(filename string) (string, error) {
 		return execfile, err
 	}
 
-	if err = os.Setenv("GODBG_TEST", "true");err != nil {
+	if err = os.Setenv("GODBG_TEST", "true"); err != nil {
 		return execfile, err
 	}
 	return execfile, nil
 }
 
-func make_out_err() (*strings.Builder,*strings.Builder){
+func make_out_err() (*strings.Builder, *strings.Builder) {
 	outWriter := &strings.Builder{}
 	errWriter := &strings.Builder{}
 
@@ -82,12 +82,11 @@ func TestBuild(t *testing.T) {
 	clear_variable()
 }
 
-
 func TestQuit(t *testing.T) {
 	var (
 		execfile string
-		err error
-		g = NewGomegaWithT(t)
+		err      error
+		g        = NewGomegaWithT(t)
 	)
 	outw, errw := make_out_err()
 
@@ -106,8 +105,8 @@ func TestQuit(t *testing.T) {
 func TestVarDefLineBreakPoint(t *testing.T) {
 	var (
 		execfile string
-		err error
-		g = NewGomegaWithT(t)
+		err      error
+		g        = NewGomegaWithT(t)
 	)
 
 	outw, errw := make_out_err()
@@ -128,8 +127,8 @@ func TestVarDefLineBreakPoint(t *testing.T) {
 func TestFuncDefLineBreakPoint(t *testing.T) {
 	var (
 		execfile string
-		err error
-		g = NewGomegaWithT(t)
+		err      error
+		g        = NewGomegaWithT(t)
 	)
 	outw, errw := make_out_err()
 
@@ -149,8 +148,8 @@ func TestFuncDefLineBreakPoint(t *testing.T) {
 func TestFuncCallLineBreakPoint(t *testing.T) {
 	var (
 		execfile string
-		err error
-		g = NewGomegaWithT(t)
+		err      error
+		g        = NewGomegaWithT(t)
 	)
 	outw, errw := make_out_err()
 
@@ -170,8 +169,8 @@ func TestFuncCallLineBreakPoint(t *testing.T) {
 func TestVarDefLineContinue(t *testing.T) {
 	var (
 		execfile string
-		err error
-		g = NewGomegaWithT(t)
+		err      error
+		g        = NewGomegaWithT(t)
 	)
 	outw, errw := make_out_err()
 
@@ -201,8 +200,8 @@ func TestVarDefLineContinue(t *testing.T) {
 func TestFuncDefLineContinue(t *testing.T) {
 	var (
 		execfile string
-		err error
-		g = NewGomegaWithT(t)
+		err      error
+		g        = NewGomegaWithT(t)
 	)
 	outw, errw := make_out_err()
 
@@ -232,8 +231,8 @@ func TestFuncDefLineContinue(t *testing.T) {
 func TestFuncCallLineContinue(t *testing.T) {
 	var (
 		execfile string
-		err error
-		g = NewGomegaWithT(t)
+		err      error
+		g        = NewGomegaWithT(t)
 	)
 	outw, errw := make_out_err()
 
@@ -263,8 +262,8 @@ func TestFuncCallLineContinue(t *testing.T) {
 func TestForExpressionContinue(t *testing.T) {
 	var (
 		execfile string
-		err error
-		g = NewGomegaWithT(t)
+		err      error
+		g        = NewGomegaWithT(t)
 	)
 	outw, errw := make_out_err()
 
@@ -304,8 +303,8 @@ func TestForExpressionContinue(t *testing.T) {
 func TestBreakClearContinue(t *testing.T) {
 	var (
 		execfile string
-		err error
-		g = NewGomegaWithT(t)
+		err      error
+		g        = NewGomegaWithT(t)
 	)
 	outw, errw := make_out_err()
 
@@ -331,6 +330,93 @@ func TestBreakClearContinue(t *testing.T) {
 
 	executor("bl")
 	g.Expect(outw.String()).Should(ContainSubstring("there is no breakpoint"))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("c")
+	g.Expect(outw.String()).Should(Equal(""))
+	g.Expect(errw.String()).Should(MatchRegexp("Process %d has exited with status 0", pid))
+
+	executor("q")
+	clear_variable()
+}
+
+func TestNextAssignExpression(t *testing.T) {
+	var (
+		execfile string
+		err      error
+		g        = NewGomegaWithT(t)
+	)
+	outw, errw := make_out_err()
+
+	execfile, err = build_run_debug("./test_file/t3.go")
+	g.Expect(err).Should(BeNil())
+	defer os.Remove(execfile)
+	pid := cmd.Process.Pid
+
+	executor("b ./test_file/t3.go:6")
+
+	g.Expect(outw.String()).Should(ContainSubstring("godbg add ./test_file/t3.go:6 breakpoint successfully"))
+	g.Expect(errw.String()).Should(Equal(""))
+
+	executor("c")
+	g.Expect(outw.String()).Should(ContainSubstring("==>      6: 	m := 0"))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("n")
+	g.Expect(outw.String()).Should(ContainSubstring("==>      7: 	n := 1"))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("n")
+	g.Expect(outw.String()).Should(ContainSubstring("==>      8: 	i := 10"))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("n")
+	g.Expect(outw.String()).Should(ContainSubstring("==>      9: 	j := 11"))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("c")
+	g.Expect(outw.String()).Should(Equal(""))
+	g.Expect(errw.String()).Should(MatchRegexp("Process %d has exited with status 0", pid))
+
+	executor("q")
+	clear_variable()
+}
+
+func TestNextCallExpress(t *testing.T) {
+	var (
+		execfile string
+		err      error
+		g        = NewGomegaWithT(t)
+	)
+	outw, errw := make_out_err()
+
+	execfile, err = build_run_debug("./test_file/t3.go")
+	g.Expect(err).Should(BeNil())
+	defer os.Remove(execfile)
+	pid := cmd.Process.Pid
+
+	executor("b ./test_file/t3.go:10")
+
+	g.Expect(outw.String()).Should(ContainSubstring("godbg add ./test_file/t3.go:10 breakpoint successfully"))
+	g.Expect(errw.String()).Should(Equal(""))
+
+	executor("c")
+	g.Expect(outw.String()).Should(ContainSubstring(`==>     10: 	fmt.Printf("%d %d %d %d\n", m, n, i, j)`))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("n")
+	g.Expect(outw.String()).Should(ContainSubstring(`==>     11: 	k := 20`))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("n")
+	g.Expect(outw.String()).Should(ContainSubstring(`==>     12: 	fmt.Printf("%d\n", k)`))
 	g.Expect(errw.String()).Should(Equal(""))
 	outw.Reset()
 

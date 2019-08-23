@@ -153,23 +153,6 @@ func (bp *BP)disableBreakPoint(info *BInfo) error {
 	return nil
 }
 
-func (bp *BP)getSingleMemInst(pc uint64) (x86asm.Inst, error){
-	var (
-		mem []byte
-		err error
-		inst x86asm.Inst
-	)
-
-	mem = make([]byte, 100)
-	if _, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(pc), mem); err != nil {
-		return x86asm.Inst{}, err
-	}
-	if inst ,err = x86asm.Decode(mem, 64); err != nil {
-		return x86asm.Inst{}, err
-	}
-	return inst, nil
-}
-
 /* version 2 */
 func (bp *BP)singleStepInstructionWithBreakpointCheck_v2() error {
 	var (
@@ -233,7 +216,7 @@ func (bp *BP)singleStepInstructionWithBreakpointCheck() (bool, error) {
 		return true, err
 	}
 	defer bp.enableBreakPoint(info)
-	if inst, err = bp.getSingleMemInst(pc); err != nil {
+	if inst, err = bi.getSingleMemInst(pc); err != nil {
 		return true, err
 	}
 

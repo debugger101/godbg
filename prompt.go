@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/c-bata/go-prompt"
 	"go.uber.org/zap"
+	"golang.org/x/arch/x86/x86asm"
 	"os"
 	"path"
 	"strconv"
@@ -263,113 +264,139 @@ func executor(input string) {
 		if len(sps) == 1 && (sps[0] == "n" || sps[0] == "next") {
 			var (
 				err error
-				//filename string
-				//lineno int
-				oldfilename string
-				//oldlineno int
 				pc uint64
 				info *BInfo
 				ok bool
-				f *Function
+				filename string
+				lineno int
+				oldfilename string
+				oldlineno int
+
+				//f *Function
+				inst x86asm.Inst
 			)
-			if oldfilename, _, err = bi.getCurFileLineByPtracePc(); err != nil {
-				printErr(err)
-				return
-			}
 
 			if pc, err = getPtracePc(); err != nil {
 				printErr(err)
 				return
 			}
-
-			if f, err = findFunctionIncludePc(pc); err != nil {
+			if info, ok = bp.findBreakPoint(pc - 1); ok {
+				pc = pc - 1
+				if err = setPcRegister(pc); err != nil {
+					printErr(err)
+					return
+				}
+				if err = bp.disableBreakPoint(info); err != nil {
+					printErr(err)
+					return
+				}
+				defer bp.enableBreakPoint(info)
+			}
+			if oldfilename, oldlineno , err = bi.pcTofileLine(pc); err != nil{
 				printErr(err)
 				return
 			}
-			funclines := make(map[int]bool, f.highpc - f.lowpc)
-			for v := f.lowpc; v < f.highpc;v++ {
-				if _, line, err := bi.pcTofileLine(v); err != nil {
-					printErr(err)
-					return
-				} else {
-					funclines[line] = true
-				}
-			}
-			for k, v := range funclines {
-				if v {
-					if curpc, err := bi.fileLineToPcForBreakPoint(oldfilename, k); err!=nil {
-						printErr(err)
-						return
-					} else {
-						if info, err = bp.SetInternalBreakPoint(curpc); err != nil && err != HasExistedBreakPointErr {
-							printErr(err)
-							return
-						}
-						if err == HasExistedBreakPointErr {
-							err = nil
-						} else {
-							defer bp.disableBreakPoint(info)
-							defer bp.clearInternalBreakPoint(curpc)
-						}
-					}
-				}
-			}
+			/*if f, err = findFunctionIncludePc(pc); err != nil {
+				printErr(err)
+				return
+			}*/
+
+			calling := false
+			callingfpc := uint64(0)
 
 			for {
 				if pc, err = getPtracePc(); err != nil {
 					printErr(err)
 					return
 				}
-
 				if info, ok = bp.findBreakPoint(pc - 1); ok {
-					if err = bp.disableBreakPoint(info); err !=nil {
-						printErr(err)
-						return
-					}
-					defer bp.enableBreakPoint(info)
-					if err = setPcRegister(pc - 1); err != nil {
-						printErr(err)
-						return
-					}
-					pc = pc - 1
-				}
-				if err = syscall.PtraceSingleStep(cmd.Process.Pid); err != nil {
-					printErr(err)
-					return
-				}
-				var s syscall.WaitStatus
-				if _, err = syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil); err != nil {
-					printErr(err)
-					return
-				}
-				if s.Exited() {
-					printExit0(cmd.Process.Pid)
-					return
-				}
-				if s.StopSignal() != syscall.SIGTRAP {
-					printErr(fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal()))
-					return
-				}
-				if pc, err = getPtracePc(); err != nil {
-					printErr(err)
-					return
-				}
-				if _, ok = bp.findBreakPoint(pc - 1); ok {
 					if err := listFileLineByPtracePc(6); err != nil {
 						printErr(err)
 						return
 					}
 					return
 				}
-				if !(f.lowpc <= pc && pc < f.highpc) {
-					if err := listFileLineByPtracePc(6); err != nil {
+
+				if calling == true && pc != callingfpc {
+					if err = syscall.PtraceSingleStep(cmd.Process.Pid); err != nil {
 						printErr(err)
 						return
 					}
-					return
+					var s syscall.WaitStatus
+					if _, err = syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil); err != nil {
+						printErr(err)
+						return
+					}
+					if s.Exited() {
+						printExit0(cmd.Process.Pid)
+						return
+					}
+					if s.StopSignal() != syscall.SIGTRAP {
+						printErr(fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal()))
+						return
+					}
+				} else if calling == true && pc == callingfpc {
+					calling = false
+					if filename, lineno, err = bi.pcTofileLine(pc); err != nil {
+						printErr(err)
+						return
+					}
+					if !(filename == oldfilename && lineno == oldlineno) {
+						if err := listFileLineByPtracePc(6); err != nil {
+							printErr(err)
+							return
+						}
+						return
+					}
+				} else {
+					if inst, err = bi.getSingleMemInst(pc); err != nil {
+						printErr(err)
+						return
+					}
+					if inst.Op == x86asm.CALL || inst.Op == x86asm.LCALL {
+						calling = true
+						callingfpc = pc + uint64(inst.Len)
+						continue
+					}
+
+					if err = syscall.PtraceSingleStep(cmd.Process.Pid); err != nil {
+						printErr(err)
+						return
+					}
+					var s syscall.WaitStatus
+					if _, err = syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil); err != nil {
+						printErr(err)
+						return
+					}
+					if s.Exited() {
+						printExit0(cmd.Process.Pid)
+						return
+					}
+					if s.StopSignal() != syscall.SIGTRAP {
+						printErr(fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal()))
+						return
+					}
+					/*fpc := pc + uint64(inst.Len)
+					if !(f.lowpc <= fpc && fpc < f.highpc) {
+						if err := listFileLineByPtracePc(6); err != nil {
+							printErr(err)
+							return
+						}
+						return
+					}*/
+					if filename, lineno , err = bi.pcTofileLine(pc + uint64(inst.Len)); err != nil{
+						printErr(err)
+						return
+					}
+					if !(filename == oldfilename && lineno == oldlineno) {
+						if err := listFileLineByPtracePc(6); err != nil {
+							printErr(err)
+							return
+						}
+						return
+					}
 				}
 			}
-			return
 		}
 	case 'l':
 		sps := strings.Split(input, " ")
@@ -471,10 +498,19 @@ func complete(docs prompt.Document) []prompt.Suggest {
 
 					inputPrefix := sps[1]
 					if inputPrefixFilename := path.Join(curWd, inputPrefix); strings.HasPrefix(filename, inputPrefixFilename) {
-						if len(inputPrefix) >= 2 && inputPrefix[:2] == "./" {
-							inputPrefix = inputPrefix[2:]
+						needComplete := ""
+						if inputPrefix == "./" {
+							inputPrefix = ""
+							needComplete = filename[len(inputPrefixFilename):]
+							if len(needComplete) > 0 && needComplete[0] == '/' {
+								needComplete = needComplete[1:]
+							}
+						} else {
+							if len(inputPrefix) > 2 && inputPrefix[:2] == "./" {
+								inputPrefix = inputPrefix[2:]
+							}
+							needComplete = filename[len(inputPrefixFilename):]
 						}
-						needComplete := filename[len(inputPrefixFilename):]
 						s = append(s, prompt.Suggest{Text: inputPrefix + needComplete, Description: ""})
 					}
 				}
