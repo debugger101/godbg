@@ -160,7 +160,10 @@ func executor(input string) {
 				printErr(err)
 				return
 			}
-			var s syscall.WaitStatus
+			var (
+				s syscall.WaitStatus
+				pc uint64
+			)
 			wpid, err := syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil)
 			if err != nil {
 				printErr(err)
@@ -178,10 +181,6 @@ func executor(input string) {
 				return
 			}
 
-
-			var (
-				pc uint64
-			)
 			if pc, err = getPtracePc(); err != nil {
 				printErr(err)
 				return
@@ -190,6 +189,185 @@ func executor(input string) {
 			if err = listFileLineByPtracePc(6); err != nil {
 				printErr(err)
 				return
+			}
+			return
+		}
+	case 's':
+		sps := strings.Split(input, " ")
+		if len(sps) == 1 && (sps[0] == "s" || sps[0] == "step") {
+			var (
+				err error
+				filename string
+				lineno int
+				oldfilename string
+				oldlineno int
+				pc uint64
+				info *BInfo
+				ok bool
+			)
+			if oldfilename, oldlineno, err = bi.getCurFileLineByPtracePc(); err != nil {
+				printErr(err)
+				return
+			}
+			for {
+				if pc, err = getPtracePc(); err != nil {
+					printErr(err)
+					return
+				}
+				if filename, lineno, err = bi.pcTofileLine(pc); err != nil {
+					printErr(err)
+					return
+				}
+
+				if !(filename == oldfilename && lineno == oldlineno) {
+					fmt.Fprintf(stdout,"current process pc = %d\n", pc)
+					if err = listFileLineByPtracePc(6); err != nil {
+						printErr(err)
+						return
+					}
+					return
+				}
+				if info, ok = bp.findBreakPoint(pc - 1); ok {
+					if err = bp.disableBreakPoint(info); err !=nil {
+						printErr(err)
+						return
+					}
+					defer bp.enableBreakPoint(info)
+					if err = setPcRegister(pc - 1); err != nil {
+						printErr(err)
+						return
+					}
+				}
+				if err = syscall.PtraceSingleStep(cmd.Process.Pid); err != nil {
+					printErr(err)
+					return
+				}
+				var s syscall.WaitStatus
+				if _, err = syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil); err != nil {
+					printErr(err)
+					return
+				}
+				if s.Exited() {
+					printExit0(cmd.Process.Pid)
+					return
+				}
+				if s.StopSignal() != syscall.SIGTRAP {
+					printErr(fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal()))
+					return
+				}
+			}
+			return
+		}
+	case 'n':
+		sps := strings.Split(input, " ")
+		if len(sps) == 1 && (sps[0] == "n" || sps[0] == "next") {
+			var (
+				err error
+				//filename string
+				//lineno int
+				oldfilename string
+				//oldlineno int
+				pc uint64
+				info *BInfo
+				ok bool
+				f *Function
+			)
+			if oldfilename, _, err = bi.getCurFileLineByPtracePc(); err != nil {
+				printErr(err)
+				return
+			}
+
+			if pc, err = getPtracePc(); err != nil {
+				printErr(err)
+				return
+			}
+
+			if f, err = findFunctionIncludePc(pc); err != nil {
+				printErr(err)
+				return
+			}
+			funclines := make(map[int]bool, f.highpc - f.lowpc)
+			for v := f.lowpc; v < f.highpc;v++ {
+				if _, line, err := bi.pcTofileLine(v); err != nil {
+					printErr(err)
+					return
+				} else {
+					funclines[line] = true
+				}
+			}
+			for k, v := range funclines {
+				if v {
+					if curpc, err := bi.fileLineToPcForBreakPoint(oldfilename, k); err!=nil {
+						printErr(err)
+						return
+					} else {
+						if info, err = bp.SetInternalBreakPoint(curpc); err != nil && err != HasExistedBreakPointErr {
+							printErr(err)
+							return
+						}
+						if err == HasExistedBreakPointErr {
+							err = nil
+						} else {
+							defer bp.disableBreakPoint(info)
+							defer bp.clearInternalBreakPoint(curpc)
+						}
+					}
+				}
+			}
+
+			for {
+				if pc, err = getPtracePc(); err != nil {
+					printErr(err)
+					return
+				}
+
+				if info, ok = bp.findBreakPoint(pc - 1); ok {
+					if err = bp.disableBreakPoint(info); err !=nil {
+						printErr(err)
+						return
+					}
+					defer bp.enableBreakPoint(info)
+					if err = setPcRegister(pc - 1); err != nil {
+						printErr(err)
+						return
+					}
+					pc = pc - 1
+				}
+				if err = syscall.PtraceSingleStep(cmd.Process.Pid); err != nil {
+					printErr(err)
+					return
+				}
+				var s syscall.WaitStatus
+				if _, err = syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil); err != nil {
+					printErr(err)
+					return
+				}
+				if s.Exited() {
+					printExit0(cmd.Process.Pid)
+					return
+				}
+				if s.StopSignal() != syscall.SIGTRAP {
+					printErr(fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal()))
+					return
+				}
+				if pc, err = getPtracePc(); err != nil {
+					printErr(err)
+					return
+				}
+				if _, ok = bp.findBreakPoint(pc - 1); ok {
+					if err := listFileLineByPtracePc(6); err != nil {
+						printErr(err)
+						return
+					}
+					return
+				}
+				if !(f.lowpc <= pc && pc < f.highpc) {
+					if err := listFileLineByPtracePc(6); err != nil {
+						printErr(err)
+						return
+					}
+					return
+				}
 			}
 			return
 		}

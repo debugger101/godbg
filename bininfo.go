@@ -272,6 +272,18 @@ func (b *BI) fileLineToPcForBreakPoint(filename string, lineno int) (uint64, err
 	return addr, nil
 }
 
+func (b *BI) getCurFileLineByPtracePc() (string, int, error ){
+	var (
+		pc uint64
+		err error
+	)
+	if pc, err = getPtracePc(); err != nil {
+		printErr(err)
+		return "", 0, errors.New("get ptrace pc failed")
+	}
+	return bi.pcTofileLine(pc)
+}
+
 func (b *BI) pcTofileLine(pc uint64)(string, int, error) {
 	if b.Sources == nil {
 		return "", 0, errors.New("no sources file")
