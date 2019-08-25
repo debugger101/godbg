@@ -9,6 +9,14 @@ var NotFoundSourceLineErr = errors.New("cant't find this source line")
 var HasExistedBreakPointErr = errors.New("this breakpoint has existed")
 var NoProcessRuning = errors.New("there is no process running")
 
+type NotFoundFuncErr struct {
+	pc uint64
+}
+
+func (e *NotFoundFuncErr) Error() string {
+	return fmt.Sprintf("findFunctionIncludePc can't find function by pc:%d", e.pc)
+}
+
 func printHelper() {
 	fmt.Fprintf(stderr, "%s\n", "Usage:\n\tJust like ./godgb debug main.go")
 }

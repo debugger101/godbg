@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"github.com/c-bata/go-prompt"
 	"go.uber.org/zap"
@@ -115,6 +117,77 @@ func executor(input string) {
 			}
 			return
 		}
+		if len(sps) == 1 && sps[0] == "bt" {
+			var (
+				rbp uint64
+				err error
+				filename string
+				line int
+				pc uint64
+				f *Function
+				ok bool
+			)
+			if rbp, err = getPtraceBp();err != nil {
+				printErr(err)
+				return
+			}
+			if pc, err = getPtracePc(); err!= nil {
+				printErr(err)
+				return
+			}
+
+			if _, ok = bp.findBreakPoint(pc - 1); ok {
+				pc = pc - 1
+			}
+			if filename, line, err = bi.pcTofileLine(pc); err != nil {
+				printErr(err)
+				return
+			}
+			fmt.Fprintf(stdout, "%s:%d\n", filename, line)
+
+			ret := uint64(0)
+			for {
+				original := make([]byte, 16)
+				_, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(rbp), original)
+				if err != nil {
+					printErr(err)
+					return
+				}
+				reader := bytes.NewBuffer(original)
+
+				//fmt.Fprintf(stdout, "rbp %d\n", rbp)
+				if err = binary.Read(reader, binary.LittleEndian, &rbp); err != nil {
+					printErr(err)
+					return
+				}
+				if err = binary.Read(reader, binary.LittleEndian, &ret); err != nil {
+					printErr(err)
+					return
+				}
+				//fmt.Fprintf(stdout, "ret = %d\n", ret)
+				if filename, line, err = bi.pcTofileLine(ret - 1); err != nil {
+					printErr(err)
+					return
+				}
+				if f, err = findFunctionIncludePc(ret - 1); err != nil {
+					// printErr(err)
+					return
+				}
+				fmt.Fprintf(stdout, "%s:%d %s\n", filename, line, f.name)
+			}
+
+			/*
+			reader = bytes.NewBuffer(original[32:])
+			if err = binary.Read(reader, binary.LittleEndian, &tmp); err != nil {
+				printErr(err)
+				return
+			}
+			fmt.Fprintf(stdout, "%d\n", tmp)
+*/
+			// strings.NewReader(original[:16])
+
+			return
+		}
 	case 'c':
 		sps := strings.Split(input, " ")
 		if len(sps) == 1 && (sps[0] == "c" || sps[0] == "continue") {
@@ -173,6 +246,7 @@ func executor(input string) {
 
 			if s.Exited() {
 				printExit0(wpid)
+				cmd.Process = nil
 				return
 			}
 
@@ -250,6 +324,7 @@ func executor(input string) {
 				}
 				if s.Exited() {
 					printExit0(cmd.Process.Pid)
+					cmd.Process = nil
 					return
 				}
 				if s.StopSignal() != syscall.SIGTRAP {
@@ -329,6 +404,7 @@ func executor(input string) {
 					}
 					if s.Exited() {
 						printExit0(cmd.Process.Pid)
+						cmd.Process = nil
 						return
 					}
 					if s.StopSignal() != syscall.SIGTRAP {
@@ -370,6 +446,7 @@ func executor(input string) {
 					}
 					if s.Exited() {
 						printExit0(cmd.Process.Pid)
+						cmd.Process = nil
 						return
 					}
 					if s.StopSignal() != syscall.SIGTRAP {
@@ -445,8 +522,9 @@ func executor(input string) {
 			if cmd.Process != nil {
 				pid = cmd.Process.Pid
 				if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGSTOP); err != nil {
-					printErr(err)
-					return
+					err = nil
+					//printErr(err)
+					//return
 				}
 			}
 			if pid != 0 {

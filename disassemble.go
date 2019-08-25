@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go.uber.org/zap"
 	"golang.org/x/arch/x86/x86asm"
+	"os"
 	"path"
 	"strings"
 	"syscall"
@@ -73,7 +74,22 @@ func findFunctionIncludePc(pc uint64) (*Function, error) {
 			return f, nil
 		}
 	}
-	return nil, fmt.Errorf("[findFunctionIncludePc] can't find function by pc:%d", pc)
+	return nil, &NotFoundFuncErr{pc: pc}
+}
+
+func tryCuttingFilename(filename string) string {
+	var (
+		dir string
+		err error
+	)
+	if dir , err = os.Getwd(); err != nil {
+		return filename
+	}
+	dir += "/"
+	if ok := strings.HasPrefix(filename, dir); ok {
+		return filename[len(dir):]
+	}
+	return filename
 }
 
 func listDisassembleByPtracePc() error {
