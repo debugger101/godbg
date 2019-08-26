@@ -427,3 +427,64 @@ func TestNextCallExpress(t *testing.T) {
 	executor("q")
 	clear_variable()
 }
+
+func TestCallStack(t *testing.T) {
+	var (
+		execfile string
+		err      error
+		g        = NewGomegaWithT(t)
+	)
+	outw, errw := make_out_err()
+
+	execfile, err = build_run_debug("./test_file/t4.go")
+	g.Expect(err).Should(BeNil())
+	defer os.Remove(execfile)
+	pid := cmd.Process.Pid
+
+	executor("b ./test_file/t4.go:6")
+
+	g.Expect(outw.String()).Should(ContainSubstring("godbg add ./test_file/t4.go:6 breakpoint successfully"))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("c")
+	g.Expect(outw.String()).Should(ContainSubstring(`==>      6: 	return fmt.Sprintf("m = %d", m)`))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("bt")
+	g.Expect(outw.String()).Should(ContainSubstring(`test_file/t4.go:6`))
+	g.Expect(outw.String()).Should(ContainSubstring(`test_file/t4.go:11 main.pppp1`))
+	g.Expect(outw.String()).Should(ContainSubstring(`test_file/t4.go:16 main.main`))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("n")
+	g.Expect(outw.String()).Should(ContainSubstring(`==>     11: 	mstr := pppp2(m)`))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("bt")
+	g.Expect(outw.String()).Should(ContainSubstring(`test_file/t4.go:11`))
+	g.Expect(outw.String()).Should(ContainSubstring(`test_file/t4.go:16 main.main`))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("n")
+	g.Expect(outw.String()).Should(ContainSubstring(`==>     12: 	fmt.Println(mstr)`))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("bt")
+	g.Expect(outw.String()).Should(ContainSubstring(`test_file/t4.go:12`))
+	g.Expect(outw.String()).Should(ContainSubstring(`test_file/t4.go:16 main.main`))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("c")
+	g.Expect(outw.String()).Should(Equal(""))
+	g.Expect(errw.String()).Should(MatchRegexp("Process %d has exited with status 0", pid))
+
+	executor("q")
+	clear_variable()
+}
