@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"compress/zlib"
 	"debug/dwarf"
 	"debug/elf"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
@@ -25,6 +28,7 @@ type Function struct {
 	declFile int64
 	external bool
 
+	variables []*dwarf.Entry
 	cu *CompileUnit
 }
 
@@ -32,6 +36,7 @@ type BI struct {
 	Sources map[string]map[int][]*dwarf.LineEntry
 	Functions []*Function
 	CompileUnits []*CompileUnit
+	Frames []*Frame
 }
 
 
@@ -39,18 +44,7 @@ func analyze(execfile string) (*BI, error) {
 	var (
 		elffile *elf.File
 		err error
-		debugLineMapTableBytes []byte
-		debugInfoBytes []byte
 		dwarfData *dwarf.Data
-		dwarfReader *dwarf.Reader
-		curEntry *dwarf.Entry
-		curSubProgramEntry *dwarf.Entry
-		curCompileUnitEntry *dwarf.Entry
-		curCompileUnit *CompileUnit
-		curFunction *Function
-		ranges [][2]uint64
-		lineReader *dwarf.LineReader
-		lineEntry *dwarf.LineEntry
 		bi *BI
 	)
 	if elffile, err = elf.Open(execfile); err != nil {
@@ -58,40 +52,105 @@ func analyze(execfile string) (*BI, error) {
 	}
 	defer elffile.Close()
 
-	lineSession := elffile.Section(".debug_line")
-	if lineSession == nil {
-		lineSession = elffile.Section(".zdebug_line")
-	}
-	if lineSession == nil {
-		return nil, errors.New("Can't not find .debug_line or .zdebug_line")
-	}
-	// please note that Data() returns uncompressed data if compressed
-	if debugLineMapTableBytes, err = lineSession.Data(); err != nil{
+	// just check
+	if _, err = openInfoSection(elffile); err != nil {
 		return nil, err
 	}
 
-
-	infoSession := elffile.Section(".debug_info")
-	if infoSession == nil {
-		infoSession = elffile.Section(".zdebug_info")
-	}
-	if infoSession == nil {
-		return nil, errors.New("Can't not find .debug_info or .zdebug_info")
-	}
-	// please note that Data() returns uncompressed data if compressed
-	if debugInfoBytes, err = infoSession.Data(); err != nil {
+	if _, err = openLineSection(elffile); err != nil {
 		return nil, err
 	}
 
+	// parse
+	bi = &BI{Sources: make(map[string]map[int][]*dwarf.LineEntry)}
 	if dwarfData, err = elffile.DWARF(); err != nil {
 		return nil, err
 	}
-	dwarfReader = dwarfData.Reader()
+	if err = bi.ParseLineAndInfoSection(dwarfData); err != nil {
+		return nil, err
+	}
+	if err = bi.ParseFrameSection(elffile); err != nil {
+		return nil, err
+	}
 
-	bi = &BI{Sources: make(map[string]map[int][]*dwarf.LineEntry)}
+	// debug source log
+	for file, mp := range bi.Sources {
+		for line, lineEntryArray := range mp {
+			for _, lineEntry := range lineEntryArray {
+				logger.Debug("bi.sources",
+					zap.String("file", file), zap.Int("line", line), zap.Uint64("addr", lineEntry.Address))
+			}
+		}
+	}
+	// debug frame log
+	for i, v := range bi.Frames {
+		if v.CIE != nil {
+			logger.Debug("bi.frames", zap.Int("index", i), zap.String("cie", v.CIE.String()))
+		} else if v.FDE != nil {
+			logger.Debug("bi.frames", zap.Int("index", i), zap.String("fde", v.FDE.String()))
+		} else {
+			logger.Error("find frame both cie/pde == nil")
+		}
+	}
+
+	return bi, nil
+}
+
+func openInfoSection(elffile *elf.File) ([]byte, error) {
+	var (
+		debugInfoBytes []byte
+		err error
+	)
+	infoSection := elffile.Section(".debug_info")
+	if infoSection == nil {
+		infoSection = elffile.Section(".zdebug_info")
+	}
+	if infoSection == nil {
+		return nil, errors.New("Can't not find .debug_info or .zdebug_info")
+	}
+	// please note that Data() returns uncompressed data if compressed
+	if debugInfoBytes, err = infoSection.Data(); err != nil {
+		return nil, err
+	}
+	return debugInfoBytes, nil
+}
+
+func openLineSection(elffile *elf.File)([]byte, error) {
+	var (
+		debugLineMapTableBytes []byte
+		err error
+	)
+	lineSection := elffile.Section(".debug_line")
+	if lineSection == nil {
+		lineSection = elffile.Section(".zdebug_line")
+	}
+	if lineSection == nil {
+		return nil, errors.New("Can't not find .debug_line or .zdebug_line")
+	}
+	// please note that Data() returns uncompressed data if compressed
+	if debugLineMapTableBytes, err = lineSection.Data(); err != nil{
+		return nil, err
+	}
+	return debugLineMapTableBytes, nil
+}
+
+func (bi *BI)ParseLineAndInfoSection(dwarfData *dwarf.Data) error {
+	var (
+		curEntry *dwarf.Entry
+		curCompileUnit *CompileUnit
+		curFunction *Function
+		err error
+		ranges [][2]uint64
+		lineReader *dwarf.LineReader
+		lineEntry *dwarf.LineEntry
+		curSubProgramEntry *dwarf.Entry
+		curCompileUnitEntry *dwarf.Entry
+		dwarfReader *dwarf.Reader
+	)
+	dwarfReader = dwarfData.Reader()
 	for {
 		if curEntry, err = dwarfReader.Next(); err != nil{
-			return nil, err
+			return err
 		}
 		if curEntry == nil {
 			break
@@ -127,13 +186,13 @@ func analyze(execfile string) (*BI, error) {
 
 
 			if lineReader, err = dwarfData.LineReader(curEntry); err != nil {
-				return nil, err
+				return err
 			}
 			lineEntry = &dwarf.LineEntry{}
 			cuname, _ := curEntry.Val(dwarf.AttrName).(string)
 			for {
 				if err = lineReader.Next(lineEntry); err != nil && err != io.EOF{
-					return nil, err
+					return err
 				}
 				if err == io.EOF {
 					err = nil
@@ -200,24 +259,92 @@ func analyze(execfile string) (*BI, error) {
 
 			curSubProgramEntry = curEntry
 		}
-	}
 
-	// debug source log
-	for file, mp := range bi.Sources {
-		for line, lineEntryArray := range mp {
-			for _, lineEntry := range lineEntryArray {
-				logger.Debug("bi",
-					zap.String("file", file), zap.Int("line", line), zap.Uint64("addr", lineEntry.Address))
+		/*curEntry.Tag == dwarf.TagArrayType ||
+		curEntry.Tag == dwarf.TagBaseType ||
+		curEntry.Tag == dwarf.TagClassType ||
+		curEntry.Tag == dwarf.TagStructType ||
+		curEntry.Tag == dwarf.TagConstType ||
+		curEntry.Tag == dwarf.TagPointerType ||
+		curEntry.Tag == dwarf.TagStringType */
+		if	curEntry.Tag == dwarf.TagVariable {
+			curFunction.variables = append(curFunction.variables, curEntry)
+			logger.Debug("|================= START ===========================|")
+			fields := curEntry.Field
+			for _, field := range fields {
+				logger.Debug(curEntry.Tag.GoString(),
+					zap.String("Attr", field.Attr.String()),
+					zap.String("Val", fmt.Sprintf("%v", field.Val)),
+					zap.String("Class", fmt.Sprintf("%s", field.Class)))
 			}
+			logger.Debug("|================== END ============================|")
 		}
 	}
 
-	_ = debugLineMapTableBytes
-	_ = debugInfoBytes
 	_ = curSubProgramEntry
 	_ = curCompileUnitEntry
+	return nil
+}
 
-	return bi, nil
+func (bi *BI)ParseFrameSection(elffile *elf.File) error {
+	var (
+		err error
+		frameSection *elf.Section
+		frameData []byte
+		frame *Frame
+	)
+	frameSection = elffile.Section(".debug_frame")
+	if frameSection == nil {
+		frameSection = elffile.Section(".zdebug_frame")
+		sectionData := func(s *elf.Section) ([]byte, error) {
+			b, err := s.Data()
+			if err != nil && uint64(len(b)) < s.Size {
+				return nil, err
+			}
+
+			if len(b) >= 12 && string(b[:4]) == "ZLIB" {
+				dlen := binary.BigEndian.Uint64(b[4:12])
+				dbuf := make([]byte, dlen)
+				r, err := zlib.NewReader(bytes.NewBuffer(b[12:]))
+				if err != nil {
+					return nil, err
+				}
+				if _, err := io.ReadFull(r, dbuf); err != nil {
+					return nil, err
+				}
+				if err := r.Close(); err != nil {
+					return nil, err
+				}
+				b = dbuf
+			}
+			return b, nil
+		}
+		if frameData, err = sectionData(frameSection); err != nil {
+			return err
+		}
+	} else {
+		if frameData, err = frameSection.Data(); err != nil {
+			return err
+		}
+	}
+	if frameSection == nil {
+		return errors.New("can'tt find the .debug_frame or .zdebug_frame")
+	}
+
+	buffer := bytes.NewBuffer(frameData)
+	for {
+		if frame, err = parseFrame(buffer); err != nil {
+			if err == io.EOF {
+				err = nil
+				break
+			}
+		}
+		if bi.Frames == nil {
+			bi.Frames = make([]*Frame, 0, 1)
+		}
+		bi.Frames = append(bi.Frames, frame)
+	}
+	return err
 }
 
 func parseLoc(loc string) (string, int, error) {

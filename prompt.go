@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"debug/dwarf"
 	"encoding/binary"
 	"fmt"
 	"github.com/c-bata/go-prompt"
 	"go.uber.org/zap"
 	"golang.org/x/arch/x86/x86asm"
+	"io/ioutil"
 	"os"
 	"path"
 	"strconv"
@@ -553,6 +555,92 @@ func executor(input string) {
 			}
 			return
 		}
+	case 'p':
+		sps := strings.Split(input, " ")
+		if len(sps) == 2 && (sps[0] == "p" || sps[0] == "print") {
+			var (
+				v string
+				pc uint64
+				err error
+				ok bool
+				f *Function
+			)
+			v = sps[1]
+			if pc, err = getPtracePc(); err != nil {
+				printErr(err)
+				return
+			}
+			if _, ok = bp.findBreakPoint(pc - 1); ok {
+				pc--
+			}
+			if f, err = findFunctionIncludePc(pc); err != nil {
+				printErr(err)
+				return
+			}
+			for _, fv := range f.variables {
+				isFound := false
+				if field := fv.AttrField(dwarf.AttrName);field != nil {
+					if fieldstr, ok := field.Val.(string); ok && fieldstr == v {
+						isFound = true
+					}
+				}
+				if isFound {
+					field := fv.AttrField(dwarf.AttrLocation)
+					loc := field.Val.([]byte)
+					op := loc[0]
+
+					var (
+						bp uint64
+						err error
+					)
+
+					if len(loc) == 3 && op == DW_OP_fbreg {
+						offset := int8(0)
+						addr := uint64(0)
+						reader := bytes.NewBuffer(field.Val.([]byte)[1:2])
+						if err = binary.Read(reader, binary.LittleEndian, &offset); err != nil {
+							printErr(err)
+						}
+						if bp, err = getPtraceBp(); err != nil {
+							printErr(err)
+							return
+						}
+
+						var auxvbuf []byte
+						auxvbuf, err = ioutil.ReadFile(fmt.Sprintf("/proc/%d/auxv", cmd.Process.Pid))
+						if err != nil {
+							printErr(err)
+							return
+						}
+						entryPoint := entryPointFromAuxvAMD64(auxvbuf)
+						fmt.Fprintf(stdout, "entrypoint %d\n", entryPoint)
+
+						addr = uint64(int64(bp) + int64(offset))
+
+						fmt.Fprintf(stdout, "offset %d\n", offset)
+						fmt.Fprintf(stdout, "bp %d %x\n", bp, bp)
+						fmt.Fprintf(stdout, "addr %d\n", addr)
+						fmt.Fprintf(stdout, "addr + entryPoint = %d\n", addr + entryPoint)
+
+						out := make([]byte, 100)
+						if count, err := syscall.PtracePeekData(cmd.Process.Pid, uintptr(addr), out);err != nil {
+							fmt.Fprintf(stdout, "syscall.PtracePeekData err")
+							printErr(err)
+						} else {
+							out = out[:count]
+							fmt.Fprintf(stdout, "%s\n", out)
+						}
+
+						for _, field := range fv.Field {
+							fmt.Printf("%#v\n", field)
+						}
+						return
+					}
+					fmt.Fprintf(stderr, "not support dwarf variable %#v", fv)
+				}
+			}
+			return
+		}
 	}
 	printUnsupportCmd(input)
 }
@@ -599,4 +687,32 @@ func complete(docs prompt.Document) []prompt.Suggest {
 		}
 	}
 	return s
+}
+
+const (
+	_AT_NULL_AMD64 = 0
+	_AT_ENTRY_AMD64 = 9
+)
+
+func entryPointFromAuxvAMD64(auxv []byte) uint64 {
+	rd := bytes.NewBuffer(auxv)
+
+	for {
+		var tag, val uint64
+		err := binary.Read(rd, binary.LittleEndian, &tag)
+		if err != nil {
+			return 0
+		}
+		err = binary.Read(rd, binary.LittleEndian, &val)
+		if err != nil {
+			return 0
+		}
+
+		switch tag {
+		case _AT_NULL_AMD64:
+			return 0
+		case _AT_ENTRY_AMD64:
+			return val
+		}
+	}
 }
