@@ -8,12 +8,12 @@ import (
 	"github.com/c-bata/go-prompt"
 	"go.uber.org/zap"
 	"golang.org/x/arch/x86/x86asm"
-	"io/ioutil"
 	"os"
 	"path"
 	"strconv"
 	"strings"
 	"syscall"
+	"unsafe"
 )
 
 func executor(input string) {
@@ -171,7 +171,7 @@ func executor(input string) {
 					printErr(err)
 					return
 				}
-				if f, err = findFunctionIncludePc(ret - 1); err != nil {
+				if f, err = bi.findFunctionIncludePc(ret - 1); err != nil {
 					// printErr(err)
 					return
 				}
@@ -373,7 +373,7 @@ func executor(input string) {
 				printErr(err)
 				return
 			}
-			/*if f, err = findFunctionIncludePc(pc); err != nil {
+			/*if f, err = bi.findFunctionIncludePc(pc); err != nil {
 				printErr(err)
 				return
 			}*/
@@ -564,6 +564,7 @@ func executor(input string) {
 				err error
 				ok bool
 				f *Function
+				frame *Frame
 			)
 			v = sps[1]
 			if pc, err = getPtracePc(); err != nil {
@@ -573,7 +574,11 @@ func executor(input string) {
 			if _, ok = bp.findBreakPoint(pc - 1); ok {
 				pc--
 			}
-			if f, err = findFunctionIncludePc(pc); err != nil {
+			if frame, err = bi.findFrameInformation(pc); err != nil {
+				printErr(err)
+				return
+			}
+			if f, err = bi.findFunctionIncludePc(pc); err != nil {
 				printErr(err)
 				return
 			}
@@ -585,55 +590,48 @@ func executor(input string) {
 					}
 				}
 				if isFound {
-					field := fv.AttrField(dwarf.AttrLocation)
-					loc := field.Val.([]byte)
-					op := loc[0]
-
 					var (
-						bp uint64
-						err error
+						opcode byte
 					)
-
-					if len(loc) == 3 && op == DW_OP_fbreg {
-						offset := int8(0)
-						addr := uint64(0)
-						reader := bytes.NewBuffer(field.Val.([]byte)[1:2])
-						if err = binary.Read(reader, binary.LittleEndian, &offset); err != nil {
-							printErr(err)
-						}
-						if bp, err = getPtraceBp(); err != nil {
-							printErr(err)
-							return
-						}
-
-						var auxvbuf []byte
-						auxvbuf, err = ioutil.ReadFile(fmt.Sprintf("/proc/%d/auxv", cmd.Process.Pid))
-						if err != nil {
+					field := fv.AttrField(dwarf.AttrLocation)
+					buf := bytes.NewBuffer(field.Val.([]byte))
+					if opcode, err = buf.ReadByte(); err != nil {
+						printErr(err)
+						return
+					}
+					switch opcode {
+					case DW_OP_fbreg:
+						num, _,_ := DecodeSLEB128(buf)
+						address := int64(frame.framebase) + num
+						// if the type is `string`
+						val := make([]byte, 8)
+						if _, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(address) + uintptr(8), val); err != nil {
 							printErr(err)
 							return
 						}
-						entryPoint := entryPointFromAuxvAMD64(auxvbuf)
-						fmt.Fprintf(stdout, "entrypoint %d\n", entryPoint)
-
-						addr = uint64(int64(bp) + int64(offset))
-
-						fmt.Fprintf(stdout, "offset %d\n", offset)
-						fmt.Fprintf(stdout, "bp %d %x\n", bp, bp)
-						fmt.Fprintf(stdout, "addr %d\n", addr)
-						fmt.Fprintf(stdout, "addr + entryPoint = %d\n", addr + entryPoint)
-
-						out := make([]byte, 100)
-						if count, err := syscall.PtracePeekData(cmd.Process.Pid, uintptr(addr), out);err != nil {
-							fmt.Fprintf(stdout, "syscall.PtracePeekData err")
+						strlen := int64(binary.LittleEndian.Uint64(val))
+						if strlen < 0 {
+							printErr(fmt.Errorf("strlen %d shoulde be < 0", strlen))
+							return
+						}
+						// read addr
+						if _, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(address), val); err != nil {
 							printErr(err)
-						} else {
-							out = out[:count]
-							fmt.Fprintf(stdout, "%s\n", out)
+							return
 						}
+						addr := uintptr(binary.LittleEndian.Uint64(val))
+						if addr == 0 {
+							printErr(fmt.Errorf("pointer addr %d shoulde be == 0", addr))
+							return
+						}
+						logger.Debug(fmt.Sprintf("address = %d,  len = %d, addr = %d,, num = %d\n", address, strlen, addr, num))
 
-						for _, field := range fv.Field {
-							fmt.Printf("%#v\n", field)
+						strpointer := make([]byte, strlen)
+						if _, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(addr), strpointer); err != nil {
+							printErr(err)
+							return
 						}
+						fmt.Fprintf(stdout, "%v\n", *(*string)(unsafe.Pointer(&strpointer)))
 						return
 					}
 					fmt.Fprintf(stderr, "not support dwarf variable %#v", fv)

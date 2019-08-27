@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"go.uber.org/zap"
 	"io"
 )
 
@@ -36,7 +37,7 @@ func (cie *CommonInformationEntry) String() string {
 
 type FrameDescriptionEntry struct {
 	length       uint32
-	// CIE          *CommonInformationEntry
+	CIE          *CommonInformationEntry
 	instructions []byte
 	begin, size  uint64
 }
@@ -49,44 +50,58 @@ func (fde *FrameDescriptionEntry) String() string {
 		fde.length, fde.instructions, fde.begin, fde.size)
 }
 
-type Frame struct {
+type VirtualUnwindFrameInformation struct {
 	len uint32
 	CIE *CommonInformationEntry
 	FDE *FrameDescriptionEntry
 }
 
-func parseFrame(buffer *bytes.Buffer) (*Frame, error) {
+type Frame struct {
+	instructions []byte
+	address uint64
+	cie *CommonInformationEntry
+	Offset int64
+	cfa *DWRule
+	regsRule map[uint64]DWRule
+	regs []uint64
+	framebase uint64
+	loc uint64
+}
+
+func parseFrameInformation(buffer *bytes.Buffer) (*VirtualUnwindFrameInformation, error) {
 	if buffer.Len() == 0 {
 		return nil, io.EOF
 	}
 	var (
-		len uint32
 		cieEntry *CommonInformationEntry
 		fdeEntry *FrameDescriptionEntry
 		err error
-		frame *Frame
+		info *VirtualUnwindFrameInformation
 	)
 
-	binary.Read(buffer, binary.LittleEndian, &len)
-	frame = &Frame{}
-	frame.len = len
+	info = &VirtualUnwindFrameInformation{}
+	binary.Read(buffer, binary.LittleEndian, &info.len)
+
 
 	tbytes := buffer.Next(4)
-	input := append(tbytes, buffer.Next(int(len - 4))...)
+	info.len -= 4
+
+	input := buffer.Next(int(info.len))
+
 	if bytes.Equal(tbytes, []byte{0xff, 0xff, 0xff, 0xff}) {
 		// cie
-		if cieEntry, err = parseCommonInformationEntryByte(len, input); err != nil {
+		if cieEntry, err = parseCommonInformationEntryByte(info.len, input); err != nil {
 			return nil, err
 		}
-		frame.CIE = cieEntry
+		info.CIE = cieEntry
 	} else {
 		// fde
-		if fdeEntry, err = parseFrameDescriptionEntryByte(len, input); err != nil {
+		if fdeEntry, err = parseFrameDescriptionEntryByte(info.len, input); err != nil {
 			return nil, err
 		}
-		frame.FDE = fdeEntry
+		info.FDE = fdeEntry
 	}
-	return frame, nil
+	return info, nil
 }
 
 // https://en.wikipedia.org/wiki/LEB128
@@ -219,6 +234,11 @@ func parseFrameDescriptionEntryByte(len uint32, data []byte) (*FrameDescriptionE
 	fde.begin = binary.LittleEndian.Uint64(data[:8]) // + ctx.staticBase
 	fde.size = binary.LittleEndian.Uint64(data[8:16])
 	fde.instructions = data[16:]
+
+	logger.Debug("parseFrameDescriptionEntryByte",
+		zap.Uint32("len", len),
+		zap.Uint64("begin", fde.begin),
+		zap.Uint64("size", fde.size))
 
 	return fde, nil
 }

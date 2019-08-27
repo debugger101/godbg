@@ -67,15 +67,6 @@ func disassemble(lowpc uint64, highpc uint64) (map[uint64]bool, [][]byte, []uint
 	return pcMap, memSlice, pcs, asmInsts, nil
 }
 
-// not considered inline function
-func findFunctionIncludePc(pc uint64) (*Function, error) {
-	for _, f := range bi.Functions {
-		if f.lowpc <= pc && pc < f.highpc {
-			return f, nil
-		}
-	}
-	return nil, &NotFoundFuncErr{pc: pc}
-}
 
 func tryCuttingFilename(filename string) string {
 	var (
@@ -108,7 +99,7 @@ func listDisassembleByPtracePc() error {
 	if pc, err = getPtracePc(); err != nil {
 		return err
 	}
-	if f, err = findFunctionIncludePc(pc); err != nil {
+	if f, err = bi.findFunctionIncludePc(pc); err != nil {
 		return err
 	}
 	if pcBpMap, mems, pcs, amsInsts, err = disassemble(f.lowpc, f.highpc); err != nil {

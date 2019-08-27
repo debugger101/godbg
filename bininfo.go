@@ -36,7 +36,7 @@ type BI struct {
 	Sources map[string]map[int][]*dwarf.LineEntry
 	Functions []*Function
 	CompileUnits []*CompileUnit
-	Frames []*Frame
+	FramesInformation []*VirtualUnwindFrameInformation
 }
 
 
@@ -83,7 +83,7 @@ func analyze(execfile string) (*BI, error) {
 		}
 	}
 	// debug frame log
-	for i, v := range bi.Frames {
+	for i, v := range bi.FramesInformation {
 		if v.CIE != nil {
 			logger.Debug("bi.frames", zap.Int("index", i), zap.String("cie", v.CIE.String()))
 		} else if v.FDE != nil {
@@ -286,12 +286,22 @@ func (bi *BI)ParseLineAndInfoSection(dwarfData *dwarf.Data) error {
 	return nil
 }
 
+// not considered inline function
+func (bi *BI)findFunctionIncludePc(pc uint64) (*Function, error) {
+	for _, f := range bi.Functions {
+		if f.lowpc <= pc && pc < f.highpc {
+			return f, nil
+		}
+	}
+	return nil, &NotFoundFuncErr{pc: pc}
+}
+
 func (bi *BI)ParseFrameSection(elffile *elf.File) error {
 	var (
 		err error
 		frameSection *elf.Section
 		frameData []byte
-		frame *Frame
+		frameInfo *VirtualUnwindFrameInformation
 	)
 	frameSection = elffile.Section(".debug_frame")
 	if frameSection == nil {
@@ -332,19 +342,110 @@ func (bi *BI)ParseFrameSection(elffile *elf.File) error {
 	}
 
 	buffer := bytes.NewBuffer(frameData)
+	var curCIE *CommonInformationEntry
 	for {
-		if frame, err = parseFrame(buffer); err != nil {
+		if frameInfo, err = parseFrameInformation(buffer); err != nil {
 			if err == io.EOF {
 				err = nil
 				break
 			}
 		}
-		if bi.Frames == nil {
-			bi.Frames = make([]*Frame, 0, 1)
+		if bi.FramesInformation == nil {
+			bi.FramesInformation = make([]*VirtualUnwindFrameInformation, 0, 1)
 		}
-		bi.Frames = append(bi.Frames, frame)
+		bi.FramesInformation = append(bi.FramesInformation, frameInfo)
+		if frameInfo.CIE != nil {
+			curCIE = frameInfo.CIE
+		}
+		if frameInfo.FDE != nil {
+			frameInfo.FDE.CIE = curCIE
+		}
 	}
 	return err
+}
+
+func (bi *BI) findFrameInformation (pc uint64) (*Frame, error) {
+	var fde *FrameDescriptionEntry
+	for index, frameInfo := range bi.FramesInformation {
+		if frameInfo.FDE != nil {
+			if frameInfo.FDE.begin <= pc && pc <= (frameInfo.FDE.begin + frameInfo.FDE.size) {
+				//fde = frameInfo.FDE
+				//break
+				if fde == nil {
+					fde = frameInfo.FDE
+
+					logger.Debug("findFrameInfomation", zap.Int("index", index))
+				} else {
+					return nil, fmt.Errorf("dumplicate fde")
+				}
+			}
+		}
+	}
+	if fde == nil {
+		return nil, fmt.Errorf("not find the frame cover pc = %d", pc)
+	}
+
+	cie := fde.CIE
+	if cie == nil {
+		return nil, fmt.Errorf("fde.CIE should not be nil")
+	}
+
+	frame := &Frame{cie: cie, cfa : &DWRule{}, regsRule: make(map[uint64]DWRule)}
+	logger.Debug("========================= cie start\n")
+	if err := execCIEInstructions(frame, bytes.NewBuffer(cie.initial_instructions)); err != nil {
+		return nil, err
+	}
+	frame.loc = fde.begin
+	frame.address = pc
+	logger.Debug("========================= cie end\n")
+
+	logger.Debug("========================= fde.instructions start \n")
+	if err := execFDEInstructions(frame, bytes.NewBuffer(fde.instructions)); err != nil {
+		return nil, err
+	}
+	logger.Debug("========================= fde.instructions end \n")
+
+	var (
+		regs syscall.PtraceRegs
+		err error
+	)
+	if regs, err  = getRegisters(); err != nil {
+		return nil, err
+	}
+
+	frame.regs = make([]uint64, 17)
+	frame.regs[16] = regs.PC()
+	frame.regs[7] = regs.Rsp
+	frame.regs[6] = regs.Rbp
+
+	logger.Debug("findFrameInformation",
+		zap.Any("regs", regs),
+		zap.Uint64("16", frame.regs[16]),
+		zap.Uint64("07", frame.regs[7]),
+		zap.Uint64("06", frame.regs[6]),
+	)
+
+	var framebase uint64
+	switch frame.cfa.rule {
+	case RuleCFA:
+		if frame.cfa.reg >= 17 {
+			return nil, fmt.Errorf("frame.cfa.reg >= 17")
+		}
+		if frame.regs[frame.cfa.reg] == 0 {
+			return nil, fmt.Errorf("rule.Reg is null")
+		}
+		reg := frame.regs[frame.cfa.reg]
+		framebase = reg + uint64(frame.cfa.offset)
+
+		logger.Debug("findFrameInformation",
+			zap.Uint64("frame.frambebase", frame.framebase),
+			zap.Int64("offset", frame.cfa.offset),
+			zap.Uint64("framebase", framebase))
+	}
+
+	frame.framebase = framebase
+
+	return frame, nil
 }
 
 func parseLoc(loc string) (string, int, error) {
