@@ -488,3 +488,39 @@ func TestCallStack(t *testing.T) {
 	executor("q")
 	clear_variable()
 }
+
+func TestPrintString(t *testing.T) {
+	var (
+		execfile string
+		err      error
+		g        = NewGomegaWithT(t)
+	)
+	outw, errw := make_out_err()
+
+	execfile, err = build_run_debug("./test_file/t5.go")
+	g.Expect(err).Should(BeNil())
+	defer os.Remove(execfile)
+	pid := cmd.Process.Pid
+
+	executor("b ./test_file/t5.go:11")
+
+	g.Expect(outw.String()).Should(ContainSubstring("godbg add ./test_file/t5.go:11 breakpoint successfully"))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("c")
+	g.Expect(outw.String()).Should(ContainSubstring(`==>     11: 	godbgvint := uint64(100)`))
+	g.Expect(errw.String()).Should(Equal(""))
+	outw.Reset()
+
+	executor("p godbgvstr")
+	g.Expect(outw.String()).Should(ContainSubstring(`hello world`))
+	outw.Reset()
+
+	executor("c")
+	g.Expect(outw.String()).Should(Equal(""))
+	g.Expect(errw.String()).Should(MatchRegexp("Process %d has exited with status 0", pid))
+
+	executor("q")
+	clear_variable()
+}
