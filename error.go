@@ -18,7 +18,7 @@ func (e *NotFoundFuncErr) Error() string {
 }
 
 func printHelper() {
-	fmt.Fprintf(stderr, "%s\n", "Usage:\n\tJust like ./godgb debug main.go")
+	fmt.Fprintf(stderr, "%s\n", "Usage:\n\tJust like `godbg debug ./main.go`.\n\tThe `main.go` is the file which you want debug.")
 }
 
 func printUnsupportCmd(cmd string) {
