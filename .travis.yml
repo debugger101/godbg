@@ -1,0 +1,14 @@
+language: go
+sudo: required
+
+os:
+  - linux
+
+matrix:
+  fast_finish: true
+  include:
+  - go: 1.12.x
+    env: GO111MODULE=on
+
+script:
+    - make test
