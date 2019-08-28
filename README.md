@@ -6,15 +6,18 @@ Start a new project, the debugger on `linux` platform for go
 
 ```
 export GO111MODULE=on  
-go build -o godbg main.go   
+go build -o godbg main.go 
+./godbg debug ./test_file/t1.go
 
-// if you want to output log of debug, please do like below(如果想开调试日志，需要如下操作)  
-// export DBGLOG=stdout  
-
-./godbg debug ./test.go  
+or you can `make install` and use `godbg` globally   
 ```
 
-inspire by [dlv](https://github.com/derekparker/delve)  (has removed codes that copied from `dlv`)
+display  
+![display.gif](https://github.com/chainhelen/godbg/blob/master/file/display.gif) 
+
+
+
+This project is inspired by [dlv](https://github.com/derekparker/delve) 
 
 > Reference： 
 >
