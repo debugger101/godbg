@@ -128,12 +128,25 @@ func execSingleInstruction(frame *Frame, buf *bytes.Buffer) error {
 		delta := byte & low_6_offset
 		frame.loc += uint64(delta) * frame.cie.code_alignment_factor
 		logger.Debug(fmt.Sprintf( "DW_CFA_advance_loc, delta %d, frame.loc=%d\n", uint64(delta), frame.loc))
+	case DW_CFA_advance_loc1:
+		delta, err := buf.ReadByte()
+		if err != nil {
+			return err
+		}
+		frame.loc += uint64(delta) * frame.cie.code_alignment_factor
+		logger.Debug(fmt.Sprintf( "DW_CFA_advance_loc1, delta %d, frame.loc=%d\n", uint64(delta), frame.loc))
 	case DW_CFA_advance_loc2:
 		var delta uint16
 		binary.Read(buf, binary.LittleEndian, &delta)
 		frame.loc += uint64(delta) * frame.cie.code_alignment_factor
 		logger.Debug(fmt.Sprintf( "DW_CFA_advance_loc2, delta %d, frame.loc=%d\n", uint64(delta), frame.loc))
-	case DW_CFA_nop:
+	case DW_CFA_restore:
+		if byte, err = buf.ReadByte(); err != nil {
+			return err
+		}
+		reg := uint64(byte & low_6_offset)
+		frame.regsRule[reg] = DWRule{rule: RuleUndefined}
+ 	case DW_CFA_nop:
 		return nil
 	default:
 		logger.Error("execInstructions unknown byte", zap.Uint8("DW_CFA",byte))
@@ -144,14 +157,18 @@ func execSingleInstruction(frame *Frame, buf *bytes.Buffer) error {
 
 func execCIEInstructions(frame *Frame, buf *bytes.Buffer) error {
 	for buf.Len() > 0 {
-		execSingleInstruction(frame, buf)
+		if err := execSingleInstruction(frame, buf); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func execFDEInstructions(frame *Frame, buf *bytes.Buffer) error {
 	for frame.address >= frame.loc && buf.Len() > 0 {
-		execSingleInstruction(frame, buf)
+		if err := execSingleInstruction(frame, buf); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -441,6 +441,18 @@ func (bi *BI) findFrameInformation (pc uint64) (*Frame, error) {
 			zap.Uint64("frame.frambebase", frame.framebase),
 			zap.Int64("offset", frame.cfa.offset),
 			zap.Uint64("framebase", framebase))
+	/*case RuleOffset:
+		addr := frame.cfa.offset
+		buf := make([]byte, 8)
+		if _ ,err := syscall.PtracePeekData(cmd.Process.Pid, uintptr(addr), buf); err !=nil{
+			return nil, err
+		}
+		v := binary.LittleEndian.Uint64(buf)
+		frame.regs[7] = v
+		framebase = v*/
+
+	default:
+		return nil, fmt.Errorf("invalid cfa rule %v", frame.cfa.rule)
 	}
 
 	frame.framebase = framebase
