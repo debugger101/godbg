@@ -252,7 +252,7 @@ func executor(input string) {
 				return
 			}
 
-			if s.StopSignal() != syscall.SIGTRAP {
+			if n := s.StopSignal(); n != syscall.SIGTRAP && n != syscall.SIGURG {
 				cmd.Process = nil
 				fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal())
 				return
@@ -329,7 +329,7 @@ func executor(input string) {
 					cmd.Process = nil
 					return
 				}
-				if s.StopSignal() != syscall.SIGTRAP {
+				if n := s.StopSignal(); n != syscall.SIGTRAP && n != syscall.SIGURG {
 					printErr(fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal()))
 					return
 				}
@@ -409,7 +409,7 @@ func executor(input string) {
 						cmd.Process = nil
 						return
 					}
-					if s.StopSignal() != syscall.SIGTRAP {
+					if n := s.StopSignal(); n != syscall.SIGTRAP && n != syscall.SIGURG {
 						printErr(fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal()))
 						return
 					}
@@ -451,7 +451,7 @@ func executor(input string) {
 						cmd.Process = nil
 						return
 					}
-					if s.StopSignal() != syscall.SIGTRAP {
+					if n := s.StopSignal(); n != syscall.SIGTRAP && n != syscall.SIGURG {
 						printErr(fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal()))
 						return
 					}
