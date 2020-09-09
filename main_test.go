@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/chainhelen/godbg/log"
+	"github.com/debugger101/godbg/log"
 	. "github.com/onsi/gomega"
 	"os"
 	"path"

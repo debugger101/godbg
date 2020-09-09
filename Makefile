@@ -5,7 +5,7 @@ install:
 	@go install ./
 
 uninstall:
-	@go clean -i github.com/chainhelen/godbg
+	@go clean -i github.com/debugger101/godbg
 
 test:
 	@go test -v
