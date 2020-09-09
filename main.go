@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/c-bata/go-prompt"
 	"github.com/c-bata/go-prompt/completer"
-	"github.com/chainhelen/godbg/log"
+	"github.com/debugger101/godbg/log"
 	"go.uber.org/zap"
 	"io"
 	"os"
