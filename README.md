@@ -13,7 +13,7 @@ or you can `make install` and use `godbg` globally
 ```
 
 display  
-![display.gif](https://github.com/chainhelen/godbg/blob/master/file/display.gif) 
+![display.gif](https://github.com/debugger101/godbg/blob/master/file/display.gif) 
 
 
 
@@ -23,7 +23,7 @@ This project is inspired by [dlv](https://github.com/derekparker/delve)
 >
 > [Writing a Linux Debugger](https://blog.tartanllama.xyz/writing-a-linux-debugger-setup/) 
 >
-> [elf101-64.pdf](<https://github.com/chainhelen/godbg/blob/master/file/elf101-64.pdf>)
+> [elf101-64.pdf](<https://github.com/debugger101/godbg/blob/master/file/elf101-64.pdf>)
 >
-> [ELF_Format.pdf](<https://github.com/chainhelen/godbg/blob/master/file/ELF_Format.pdf>)
+> [ELF_Format.pdf](<https://github.com/debugger101/godbg/blob/master/file/ELF_Format.pdf>)
 

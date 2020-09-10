@@ -1,4 +1,4 @@
-module github.com/chainhelen/godbg
+module github.com/debugger101/godbg
 
 go 1.12
 
