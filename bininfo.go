@@ -21,31 +21,30 @@ type CompileUnit struct {
 }
 
 type Function struct {
-	name string
-	lowpc uint64
-	highpc uint64
+	name      string
+	lowpc     uint64
+	highpc    uint64
 	frameBase []byte
-	declFile int64
-	external bool
+	declFile  int64
+	external  bool
 
 	variables []*dwarf.Entry
-	cu *CompileUnit
+	cu        *CompileUnit
 }
 
 type BI struct {
-	Sources map[string]map[int][]*dwarf.LineEntry
-	Functions []*Function
-	CompileUnits []*CompileUnit
+	Sources           map[string]map[int][]*dwarf.LineEntry
+	Functions         []*Function
+	CompileUnits      []*CompileUnit
 	FramesInformation []*VirtualUnwindFrameInformation
 }
 
-
 func analyze(execfile string) (*BI, error) {
 	var (
-		elffile *elf.File
-		err error
+		elffile   *elf.File
+		err       error
 		dwarfData *dwarf.Data
-		bi *BI
+		bi        *BI
 	)
 	if elffile, err = elf.Open(execfile); err != nil {
 		return nil, err
@@ -99,7 +98,7 @@ func analyze(execfile string) (*BI, error) {
 func openInfoSection(elffile *elf.File) ([]byte, error) {
 	var (
 		debugInfoBytes []byte
-		err error
+		err            error
 	)
 	infoSection := elffile.Section(".debug_info")
 	if infoSection == nil {
@@ -115,10 +114,10 @@ func openInfoSection(elffile *elf.File) ([]byte, error) {
 	return debugInfoBytes, nil
 }
 
-func openLineSection(elffile *elf.File)([]byte, error) {
+func openLineSection(elffile *elf.File) ([]byte, error) {
 	var (
 		debugLineMapTableBytes []byte
-		err error
+		err                    error
 	)
 	lineSection := elffile.Section(".debug_line")
 	if lineSection == nil {
@@ -128,34 +127,33 @@ func openLineSection(elffile *elf.File)([]byte, error) {
 		return nil, errors.New("Can't not find .debug_line or .zdebug_line")
 	}
 	// please note that Data() returns uncompressed data if compressed
-	if debugLineMapTableBytes, err = lineSection.Data(); err != nil{
+	if debugLineMapTableBytes, err = lineSection.Data(); err != nil {
 		return nil, err
 	}
 	return debugLineMapTableBytes, nil
 }
 
-func (bi *BI)ParseLineAndInfoSection(dwarfData *dwarf.Data) error {
+func (bi *BI) ParseLineAndInfoSection(dwarfData *dwarf.Data) error {
 	var (
-		curEntry *dwarf.Entry
-		curCompileUnit *CompileUnit
-		curFunction *Function
-		err error
-		ranges [][2]uint64
-		lineReader *dwarf.LineReader
-		lineEntry *dwarf.LineEntry
-		curSubProgramEntry *dwarf.Entry
+		curEntry            *dwarf.Entry
+		curCompileUnit      *CompileUnit
+		curFunction         *Function
+		err                 error
+		ranges              [][2]uint64
+		lineReader          *dwarf.LineReader
+		lineEntry           *dwarf.LineEntry
+		curSubProgramEntry  *dwarf.Entry
 		curCompileUnitEntry *dwarf.Entry
-		dwarfReader *dwarf.Reader
+		dwarfReader         *dwarf.Reader
 	)
 	dwarfReader = dwarfData.Reader()
 	for {
-		if curEntry, err = dwarfReader.Next(); err != nil{
+		if curEntry, err = dwarfReader.Next(); err != nil {
 			return err
 		}
 		if curEntry == nil {
 			break
 		}
-
 
 		if curEntry.Tag == dwarf.TagCompileUnit {
 			curCompileUnit = &CompileUnit{}
@@ -184,21 +182,20 @@ func (bi *BI)ParseLineAndInfoSection(dwarfData *dwarf.Data) error {
 			*/
 			_ = ranges
 
-
 			if lineReader, err = dwarfData.LineReader(curEntry); err != nil {
 				return err
 			}
 			lineEntry = &dwarf.LineEntry{}
 			cuname, _ := curEntry.Val(dwarf.AttrName).(string)
 			for {
-				if err = lineReader.Next(lineEntry); err != nil && err != io.EOF{
+				if err = lineReader.Next(lineEntry); err != nil && err != io.EOF {
 					return err
 				}
 				if err == io.EOF {
 					err = nil
 					break
 				}
-				logger.Debug("cu:" + cuname, zap.Any("lineEntry", lineEntry))
+				logger.Debug("cu:"+cuname, zap.Any("lineEntry", lineEntry))
 				if lineEntry.File != nil {
 					if bi.Sources[lineEntry.File.Name] == nil {
 						bi.Sources[lineEntry.File.Name] = make(map[int][]*dwarf.LineEntry)
@@ -247,7 +244,7 @@ func (bi *BI)ParseLineAndInfoSection(dwarfData *dwarf.Data) error {
 						curFunction.external = val
 					}
 				default:
-					logger.Debug("analyze:TagSubprogram unknow attr", zap.Any("field",field))
+					logger.Debug("analyze:TagSubprogram unknow attr", zap.Any("field", field))
 				}
 				// for debug log
 				logger.Debug("TagSubprogram",
@@ -267,7 +264,7 @@ func (bi *BI)ParseLineAndInfoSection(dwarfData *dwarf.Data) error {
 		curEntry.Tag == dwarf.TagConstType ||
 		curEntry.Tag == dwarf.TagPointerType ||
 		curEntry.Tag == dwarf.TagStringType */
-		if	curEntry.Tag == dwarf.TagVariable {
+		if curEntry.Tag == dwarf.TagVariable {
 			curFunction.variables = append(curFunction.variables, curEntry)
 			logger.Debug("|================= START ===========================|")
 			fields := curEntry.Field
@@ -287,7 +284,7 @@ func (bi *BI)ParseLineAndInfoSection(dwarfData *dwarf.Data) error {
 }
 
 // not considered inline function
-func (bi *BI)findFunctionIncludePc(pc uint64) (*Function, error) {
+func (bi *BI) findFunctionIncludePc(pc uint64) (*Function, error) {
 	for _, f := range bi.Functions {
 		if f.lowpc <= pc && pc < f.highpc {
 			return f, nil
@@ -296,12 +293,12 @@ func (bi *BI)findFunctionIncludePc(pc uint64) (*Function, error) {
 	return nil, &NotFoundFuncErr{pc: pc}
 }
 
-func (bi *BI)ParseFrameSection(elffile *elf.File) error {
+func (bi *BI) ParseFrameSection(elffile *elf.File) error {
 	var (
-		err error
+		err          error
 		frameSection *elf.Section
-		frameData []byte
-		frameInfo *VirtualUnwindFrameInformation
+		frameData    []byte
+		frameInfo    *VirtualUnwindFrameInformation
 	)
 	frameSection = elffile.Section(".debug_frame")
 	if frameSection == nil {
@@ -364,11 +361,11 @@ func (bi *BI)ParseFrameSection(elffile *elf.File) error {
 	return err
 }
 
-func (bi *BI) findFrameInformation (pc uint64) (*Frame, error) {
+func (bi *BI) findFrameInformation(pc uint64) (*Frame, error) {
 	var fde *FrameDescriptionEntry
 	for index, frameInfo := range bi.FramesInformation {
 		if frameInfo.FDE != nil {
-			if frameInfo.FDE.begin <= pc && pc <= (frameInfo.FDE.begin + frameInfo.FDE.size) {
+			if frameInfo.FDE.begin <= pc && pc <= (frameInfo.FDE.begin+frameInfo.FDE.size) {
 				//fde = frameInfo.FDE
 				//break
 				if fde == nil {
@@ -390,7 +387,7 @@ func (bi *BI) findFrameInformation (pc uint64) (*Frame, error) {
 		return nil, fmt.Errorf("fde.CIE should not be nil")
 	}
 
-	frame := &Frame{cie: cie, cfa : &DWRule{}, regsRule: make(map[uint64]DWRule)}
+	frame := &Frame{cie: cie, cfa: &DWRule{}, regsRule: make(map[uint64]DWRule)}
 	logger.Debug("========================= cie start\n")
 	if err := execCIEInstructions(frame, bytes.NewBuffer(cie.initial_instructions)); err != nil {
 		return nil, err
@@ -407,9 +404,9 @@ func (bi *BI) findFrameInformation (pc uint64) (*Frame, error) {
 
 	var (
 		regs syscall.PtraceRegs
-		err error
+		err  error
 	)
-	if regs, err  = getRegisters(); err != nil {
+	if regs, err = getRegisters(); err != nil {
 		return nil, err
 	}
 
@@ -442,14 +439,14 @@ func (bi *BI) findFrameInformation (pc uint64) (*Frame, error) {
 			zap.Int64("offset", frame.cfa.offset),
 			zap.Uint64("framebase", framebase))
 	/*case RuleOffset:
-		addr := frame.cfa.offset
-		buf := make([]byte, 8)
-		if _ ,err := syscall.PtracePeekData(cmd.Process.Pid, uintptr(addr), buf); err !=nil{
-			return nil, err
-		}
-		v := binary.LittleEndian.Uint64(buf)
-		frame.regs[7] = v
-		framebase = v*/
+	addr := frame.cfa.offset
+	buf := make([]byte, 8)
+	if _ ,err := syscall.PtracePeekData(cmd.Process.Pid, uintptr(addr), buf); err !=nil{
+		return nil, err
+	}
+	v := binary.LittleEndian.Uint64(buf)
+	frame.regs[7] = v
+	framebase = v*/
 
 	default:
 		return nil, fmt.Errorf("invalid cfa rule %v", frame.cfa.rule)
@@ -462,7 +459,7 @@ func (bi *BI) findFrameInformation (pc uint64) (*Frame, error) {
 
 func parseLoc(loc string) (string, int, error) {
 	sps := strings.Split(loc, ":")
-	if len(sps) != 2{
+	if len(sps) != 2 {
 		return "", 0, errors.New("wrong loc should be like filename:lineno")
 	}
 	filename, linenostr := sps[0], sps[1]
@@ -473,7 +470,7 @@ func parseLoc(loc string) (string, int, error) {
 	return filename, lineno, nil
 }
 
-func (b *BI) locToPc(loc string) (uint64, error){
+func (b *BI) locToPc(loc string) (uint64, error) {
 	filename, lineno, err := parseLoc(loc)
 	if err != nil {
 		return 0, err
@@ -482,14 +479,14 @@ func (b *BI) locToPc(loc string) (uint64, error){
 }
 
 func (b *BI) fileLineToPc(filename string, lineno int) (uint64, error) {
-	if b.Sources[filename] == nil || b.Sources[filename][lineno] == nil || len(b.Sources[filename][lineno]) == 0{
+	if b.Sources[filename] == nil || b.Sources[filename][lineno] == nil || len(b.Sources[filename][lineno]) == 0 {
 		return 0, NotFoundSourceLineErr
 	}
 	return b.Sources[filename][lineno][0].Address, nil
 }
 
 func (b *BI) fileLineToPcForBreakPoint(filename string, lineno int) (uint64, error) {
-	if b.Sources[filename] == nil || b.Sources[filename][lineno] == nil || len(b.Sources[filename][lineno]) == 0{
+	if b.Sources[filename] == nil || b.Sources[filename][lineno] == nil || len(b.Sources[filename][lineno]) == 0 {
 		return 0, NotFoundSourceLineErr
 	}
 	lineEntryArray := b.Sources[filename][lineno]
@@ -514,9 +511,9 @@ func (b *BI) fileLineToPcForBreakPoint(filename string, lineno int) (uint64, err
 	return addr, nil
 }
 
-func (b *BI) getCurFileLineByPtracePc() (string, int, error ){
+func (b *BI) getCurFileLineByPtracePc() (string, int, error) {
 	var (
-		pc uint64
+		pc  uint64
 		err error
 	)
 	if pc, err = getPtracePc(); err != nil {
@@ -526,21 +523,20 @@ func (b *BI) getCurFileLineByPtracePc() (string, int, error ){
 	return bi.pcTofileLine(pc)
 }
 
-func (b *BI) pcTofileLine(pc uint64)(string, int, error) {
+func (b *BI) pcTofileLine(pc uint64) (string, int, error) {
 	if b.Sources == nil {
 		return "", 0, errors.New("no sources file")
 	}
 
 	type Rs struct {
-		pc uint64
+		pc        uint64
 		existedPc bool
-		filename string
-		lineno int
+		filename  string
+		lineno    int
 	}
 
 	rangeMin := &Rs{}
 	rangeMax := &Rs{}
-
 
 	for filename, filenameMp := range b.Sources {
 		for lineno, lineEntryArray := range filenameMp {
@@ -567,10 +563,10 @@ func (b *BI) pcTofileLine(pc uint64)(string, int, error) {
 	return rangeMin.filename, rangeMin.lineno, nil
 }
 
-func (bi *BI)getSingleMemInst(pc uint64) (x86asm.Inst, error){
+func (bi *BI) getSingleMemInst(pc uint64) (x86asm.Inst, error) {
 	var (
-		mem []byte
-		err error
+		mem  []byte
+		err  error
 		inst x86asm.Inst
 	)
 
@@ -578,7 +574,7 @@ func (bi *BI)getSingleMemInst(pc uint64) (x86asm.Inst, error){
 	if _, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(pc), mem); err != nil {
 		return x86asm.Inst{}, err
 	}
-	if inst ,err = x86asm.Decode(mem, 64); err != nil {
+	if inst, err = x86asm.Decode(mem, 64); err != nil {
 		return x86asm.Inst{}, err
 	}
 	return inst, nil

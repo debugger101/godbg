@@ -10,14 +10,14 @@ import (
 
 // http://dwarfstd.org/doc/Dwarf3.pdf
 type CommonInformationEntry struct {
-	length uint32
-	cie_id uint64
-	version byte
-	augmentation string
-	code_alignment_factor uint64
-	data_alignment_factor int64
+	length                  uint32
+	cie_id                  uint64
+	version                 byte
+	augmentation            string
+	code_alignment_factor   uint64
+	data_alignment_factor   int64
 	return_address_register uint64
-	initial_instructions []byte
+	initial_instructions    []byte
 	// `padding`, Enough DW_CFA_nop instructions to make the size of this entry match the length value above.
 }
 
@@ -25,14 +25,14 @@ func (cie *CommonInformationEntry) String() string {
 	if cie == nil {
 		return "`cie == nil` is true, please check cie"
 	}
-	return fmt.Sprintf("len=%d, cie_id=0x%x, " +
-		"versiont=%v, augmentation=%s, code_alignment_factor=%d, " +
-		"data_alignment_factor=%d, return_address_register=0x%x, " +
+	return fmt.Sprintf("len=%d, cie_id=0x%x, "+
+		"versiont=%v, augmentation=%s, code_alignment_factor=%d, "+
+		"data_alignment_factor=%d, return_address_register=0x%x, "+
 		"initial_instructions=%v",
-	cie.length,
-	cie.cie_id, cie.version, cie.augmentation,
-	cie.code_alignment_factor, cie.data_alignment_factor, cie.return_address_register,
-	cie.initial_instructions)
+		cie.length,
+		cie.cie_id, cie.version, cie.augmentation,
+		cie.code_alignment_factor, cie.data_alignment_factor, cie.return_address_register,
+		cie.initial_instructions)
 }
 
 type FrameDescriptionEntry struct {
@@ -58,14 +58,14 @@ type VirtualUnwindFrameInformation struct {
 
 type Frame struct {
 	instructions []byte
-	address uint64
-	cie *CommonInformationEntry
-	Offset int64
-	cfa *DWRule
-	regsRule map[uint64]DWRule
-	regs []uint64
-	framebase uint64
-	loc uint64
+	address      uint64
+	cie          *CommonInformationEntry
+	Offset       int64
+	cfa          *DWRule
+	regsRule     map[uint64]DWRule
+	regs         []uint64
+	framebase    uint64
+	loc          uint64
 }
 
 func parseFrameInformation(buffer *bytes.Buffer) (*VirtualUnwindFrameInformation, error) {
@@ -75,13 +75,12 @@ func parseFrameInformation(buffer *bytes.Buffer) (*VirtualUnwindFrameInformation
 	var (
 		cieEntry *CommonInformationEntry
 		fdeEntry *FrameDescriptionEntry
-		err error
-		info *VirtualUnwindFrameInformation
+		err      error
+		info     *VirtualUnwindFrameInformation
 	)
 
 	info = &VirtualUnwindFrameInformation{}
 	binary.Read(buffer, binary.LittleEndian, &info.len)
-
 
 	tbytes := buffer.Next(4)
 	info.len -= 4
@@ -114,12 +113,12 @@ func parseFrameInformation(buffer *bytes.Buffer) (*VirtualUnwindFrameInformation
 //	 break;
 //	 shift += 7;
 // }
-func DecodeULEB128(buf *bytes.Buffer) (uint64, uint32, error){
+func DecodeULEB128(buf *bytes.Buffer) (uint64, uint32, error) {
 	var (
-		res uint64
-		len uint32
-		err error
-		b byte
+		res   uint64
+		len   uint32
+		err   error
+		b     byte
 		shift uint64
 	)
 	for {
@@ -140,6 +139,7 @@ func DecodeULEB128(buf *bytes.Buffer) (uint64, uint32, error){
 
 	return res, len, nil
 }
+
 // https://en.wikipedia.org/wiki/LEB128
 // result = 0;
 // shift = 0;
@@ -156,10 +156,10 @@ func DecodeULEB128(buf *bytes.Buffer) (uint64, uint32, error){
 //   result |= (~0 << shift);
 func DecodeSLEB128(buf *bytes.Buffer) (int64, uint32, error) {
 	var (
-		res int64
-		len uint32
-		err error
-		b byte
+		res   int64
+		len   uint32
+		err   error
+		b     byte
 		shift uint64
 	)
 
@@ -184,7 +184,7 @@ func DecodeSLEB128(buf *bytes.Buffer) (int64, uint32, error) {
 	return res, len, nil
 }
 
-func parseCommonInformationEntryByte(len uint32, data []byte) (*CommonInformationEntry, error){
+func parseCommonInformationEntryByte(len uint32, data []byte) (*CommonInformationEntry, error) {
 	var (
 		err error
 		str string

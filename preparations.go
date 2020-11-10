@@ -21,7 +21,7 @@ func checkArgs() error {
 	if debug != "debug" {
 		return errors.New("only support `debug`")
 	}
-	if  path.Ext(os.Args[2]) != ".go" {
+	if path.Ext(os.Args[2]) != ".go" {
 		return errors.New("please input .go file")
 	}
 	return nil
@@ -46,9 +46,9 @@ func absoluteFilename() (string, error) {
 	return filename, nil
 }
 
-func build (filename string) (string, error) {
+func build(filename string) (string, error) {
 	base := filepath.Base(filename)
-	execfile := path.Join(os.TempDir(), "__" + base+"__")
+	execfile := path.Join(os.TempDir(), "__"+base+"__")
 
 	args := []string{"build", "-gcflags", "all=-N -l", "-o", execfile, filename}
 
@@ -57,7 +57,7 @@ func build (filename string) (string, error) {
 }
 
 // not supoort arguments of cmds
-func runexec(execfile string) (*exec.Cmd, error){
+func runexec(execfile string) (*exec.Cmd, error) {
 	cmd := exec.Command(execfile)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -77,4 +77,3 @@ func runexec(execfile string) (*exec.Cmd, error){
 	}
 	return cmd, nil
 }
-

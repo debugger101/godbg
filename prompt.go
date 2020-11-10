@@ -25,7 +25,7 @@ func executor(input string) {
 
 	switch fs {
 	case 'q':
-		if input == "q" || input == "quit"{
+		if input == "q" || input == "quit" {
 			if cmd.Process != nil {
 				if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
 					// printErr(err)
@@ -56,7 +56,7 @@ func executor(input string) {
 				printErr(err)
 				return
 			} else {
-				fmt.Fprintf(stdout,"godbg add %s:%d breakpoint successfully\n",bInfo.filename, bInfo.lineno)
+				fmt.Fprintf(stdout, "godbg add %s:%d breakpoint successfully\n", bInfo.filename, bInfo.lineno)
 			}
 			return
 		}
@@ -85,7 +85,7 @@ func executor(input string) {
 						count++
 						if count == needClearIndex {
 							bp.disableBreakPoint(v)
-							bp.infos = append(bp.infos[:i], bp.infos[(i + 1):len(bp.infos)]...)
+							bp.infos = append(bp.infos[:i], bp.infos[(i+1):len(bp.infos)]...)
 							fmt.Fprintf(stdout, "clear breakpoint %d successfully, resort breakpoint again\n", needClearIndex)
 							return
 						}
@@ -100,11 +100,11 @@ func executor(input string) {
 			for _, v := range bp.infos {
 				if v.kind == USERBPTYPE {
 					count++
-					fmt.Fprintf(stdout,"%-2d. %s:%d, pc %d\n", count, v.filename, v.lineno, v.pc)
+					fmt.Fprintf(stdout, "%-2d. %s:%d, pc %d\n", count, v.filename, v.lineno, v.pc)
 				}
 			}
 			if count == 0 {
-				fmt.Fprintf(stdout,"there is no breakpoint\n")
+				fmt.Fprintf(stdout, "there is no breakpoint\n")
 			}
 			return
 		}
@@ -112,28 +112,28 @@ func executor(input string) {
 			count := 0
 			for _, v := range bp.infos {
 				count++
-				fmt.Fprintf(stdout,"%-2d. %s:%d, pc %d, type %s\n", count, v.filename, v.lineno, v.pc, v.kind.String())
+				fmt.Fprintf(stdout, "%-2d. %s:%d, pc %d, type %s\n", count, v.filename, v.lineno, v.pc, v.kind.String())
 			}
 			if count == 0 {
-				fmt.Fprintf(stdout,"there is no breakpoint\n")
+				fmt.Fprintf(stdout, "there is no breakpoint\n")
 			}
 			return
 		}
 		if len(sps) == 1 && sps[0] == "bt" {
 			var (
-				rbp uint64
-				err error
+				rbp      uint64
+				err      error
 				filename string
-				line int
-				pc uint64
-				f *Function
-				ok bool
+				line     int
+				pc       uint64
+				f        *Function
+				ok       bool
 			)
-			if rbp, err = getPtraceBp();err != nil {
+			if rbp, err = getPtraceBp(); err != nil {
 				printErr(err)
 				return
 			}
-			if pc, err = getPtracePc(); err!= nil {
+			if pc, err = getPtracePc(); err != nil {
 				printErr(err)
 				return
 			}
@@ -179,13 +179,13 @@ func executor(input string) {
 			}
 
 			/*
-			reader = bytes.NewBuffer(original[32:])
-			if err = binary.Read(reader, binary.LittleEndian, &tmp); err != nil {
-				printErr(err)
-				return
-			}
-			fmt.Fprintf(stdout, "%d\n", tmp)
-*/
+				reader = bytes.NewBuffer(original[32:])
+				if err = binary.Read(reader, binary.LittleEndian, &tmp); err != nil {
+					printErr(err)
+					return
+				}
+				fmt.Fprintf(stdout, "%d\n", tmp)
+			*/
 			// strings.NewReader(original[:16])
 
 			return
@@ -199,33 +199,33 @@ func executor(input string) {
 			}
 
 			/*
-			version 1
-			if ok, err := bp.singleStepInstructionWithBreakpointCheck(); err != nil {
-				printErr(err)
-				return
-			} else if ok {
-				if err := bp.Continue(); err != nil {
+				version 1
+				if ok, err := bp.singleStepInstructionWithBreakpointCheck(); err != nil {
 					printErr(err)
 					return
-				}
-				var s syscall.WaitStatus
-				wpid, err := syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil)
-				if err != nil {
-					printErr(err)
-					return
-				}
-				status := (syscall.WaitStatus)(s)
-				if status.Exited() {
-					// TODO
-					if cmd.Process != nil && wpid == cmd.Process.Pid {
-						printExit0(wpid)
-					} else {
-						printExit0(wpid)
+				} else if ok {
+					if err := bp.Continue(); err != nil {
+						printErr(err)
+						return
 					}
-					cmd.Process = nil
-					return
-				}
-			}*/
+					var s syscall.WaitStatus
+					wpid, err := syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil)
+					if err != nil {
+						printErr(err)
+						return
+					}
+					status := (syscall.WaitStatus)(s)
+					if status.Exited() {
+						// TODO
+						if cmd.Process != nil && wpid == cmd.Process.Pid {
+							printExit0(wpid)
+						} else {
+							printExit0(wpid)
+						}
+						cmd.Process = nil
+						return
+					}
+				}*/
 
 			/* version 2 */
 			if err := bp.singleStepInstructionWithBreakpointCheck_v2(); err != nil {
@@ -237,7 +237,7 @@ func executor(input string) {
 				return
 			}
 			var (
-				s syscall.WaitStatus
+				s  syscall.WaitStatus
 				pc uint64
 			)
 			wpid, err := syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil)
@@ -262,7 +262,7 @@ func executor(input string) {
 				printErr(err)
 				return
 			}
-			fmt.Fprintf(stdout,"current process pc = %d\n", pc)
+			fmt.Fprintf(stdout, "current process pc = %d\n", pc)
 			if err = listFileLineByPtracePc(6); err != nil {
 				printErr(err)
 				return
@@ -273,14 +273,14 @@ func executor(input string) {
 		sps := strings.Split(input, " ")
 		if len(sps) == 1 && (sps[0] == "s" || sps[0] == "step") {
 			var (
-				err error
-				filename string
-				lineno int
+				err         error
+				filename    string
+				lineno      int
 				oldfilename string
-				oldlineno int
-				pc uint64
-				info *BInfo
-				ok bool
+				oldlineno   int
+				pc          uint64
+				info        *BInfo
+				ok          bool
 			)
 			if oldfilename, oldlineno, err = bi.getCurFileLineByPtracePc(); err != nil {
 				printErr(err)
@@ -297,7 +297,7 @@ func executor(input string) {
 				}
 
 				if !(filename == oldfilename && lineno == oldlineno) {
-					fmt.Fprintf(stdout,"current process pc = %d\n", pc)
+					fmt.Fprintf(stdout, "current process pc = %d\n", pc)
 					if err = listFileLineByPtracePc(6); err != nil {
 						printErr(err)
 						return
@@ -305,7 +305,7 @@ func executor(input string) {
 					return
 				}
 				if info, ok = bp.findBreakPoint(pc - 1); ok {
-					if err = bp.disableBreakPoint(info); err !=nil {
+					if err = bp.disableBreakPoint(info); err != nil {
 						printErr(err)
 						return
 					}
@@ -340,14 +340,14 @@ func executor(input string) {
 		sps := strings.Split(input, " ")
 		if len(sps) == 1 && (sps[0] == "n" || sps[0] == "next") {
 			var (
-				err error
-				pc uint64
-				info *BInfo
-				ok bool
-				filename string
-				lineno int
+				err         error
+				pc          uint64
+				info        *BInfo
+				ok          bool
+				filename    string
+				lineno      int
 				oldfilename string
-				oldlineno int
+				oldlineno   int
 
 				//f *Function
 				inst x86asm.Inst
@@ -369,7 +369,7 @@ func executor(input string) {
 				}
 				defer bp.enableBreakPoint(info)
 			}
-			if oldfilename, oldlineno , err = bi.pcTofileLine(pc); err != nil{
+			if oldfilename, oldlineno, err = bi.pcTofileLine(pc); err != nil {
 				printErr(err)
 				return
 			}
@@ -463,7 +463,7 @@ func executor(input string) {
 						}
 						return
 					}*/
-					if filename, lineno , err = bi.pcTofileLine(pc + uint64(inst.Len)); err != nil{
+					if filename, lineno, err = bi.pcTofileLine(pc + uint64(inst.Len)); err != nil {
 						printErr(err)
 						return
 					}
@@ -559,11 +559,11 @@ func executor(input string) {
 		sps := strings.Split(input, " ")
 		if len(sps) == 2 && (sps[0] == "p" || sps[0] == "print") {
 			var (
-				v string
-				pc uint64
-				err error
-				ok bool
-				f *Function
+				v     string
+				pc    uint64
+				err   error
+				ok    bool
+				f     *Function
 				frame *Frame
 			)
 			v = sps[1]
@@ -584,7 +584,7 @@ func executor(input string) {
 			}
 			for _, fv := range f.variables {
 				isFound := false
-				if field := fv.AttrField(dwarf.AttrName);field != nil {
+				if field := fv.AttrField(dwarf.AttrName); field != nil {
 					if fieldstr, ok := field.Val.(string); ok && fieldstr == v {
 						isFound = true
 					}
@@ -601,11 +601,11 @@ func executor(input string) {
 					}
 					switch opcode {
 					case DW_OP_fbreg:
-						num, _,_ := DecodeSLEB128(buf)
+						num, _, _ := DecodeSLEB128(buf)
 						address := int64(frame.framebase) + num
 						// if the type is `string`
 						val := make([]byte, 8)
-						if _, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(address) + uintptr(8), val); err != nil {
+						if _, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(address)+uintptr(8), val); err != nil {
 							printErr(err)
 							return
 						}
@@ -657,7 +657,7 @@ func complete(docs prompt.Document) []prompt.Suggest {
 					if filename[0] == '/' {
 						filename = filename[1:]
 					}
-					s = append(s, prompt.Suggest{Text: filename, Description:""})
+					s = append(s, prompt.Suggest{Text: filename, Description: ""})
 				} else {
 
 					inputPrefix := sps[1]
@@ -688,7 +688,7 @@ func complete(docs prompt.Document) []prompt.Suggest {
 }
 
 const (
-	_AT_NULL_AMD64 = 0
+	_AT_NULL_AMD64  = 0
 	_AT_ENTRY_AMD64 = 9
 )
 
