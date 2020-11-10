@@ -13,9 +13,9 @@ import (
 type BInfo struct {
 	original []byte
 	filename string
-	lineno int
-	pc uint64
-	kind BPKIND
+	lineno   int
+	pc       uint64
+	kind     BPKIND
 }
 
 type BP struct {
@@ -25,11 +25,11 @@ type BP struct {
 type BPKIND uint64
 
 const (
-	USERBPTYPE BPKIND = 1
+	USERBPTYPE     BPKIND = 1
 	INTERNALBPTYPE BPKIND = 2
 )
 
-func (b *BPKIND)String() string{
+func (b *BPKIND) String() string {
 	if *b == USERBPTYPE {
 		return "USERBPTYPE"
 	}
@@ -39,7 +39,7 @@ func (b *BPKIND)String() string{
 	return "unknown"
 }
 
-func (bp *BP)setPcBreakPoint(pc uint64) ([]byte, error){
+func (bp *BP) setPcBreakPoint(pc uint64) ([]byte, error) {
 	// no need to add RwLock
 	var err error
 	if bp.infos == nil {
@@ -65,10 +65,10 @@ func (bp *BP)setPcBreakPoint(pc uint64) ([]byte, error){
 	return original, nil
 }
 
-func (bp *BP)SetInternalBreakPoint(pc uint64) (*BInfo, error)  {
+func (bp *BP) SetInternalBreakPoint(pc uint64) (*BInfo, error) {
 	var (
 		original []byte
-		err error
+		err      error
 	)
 	if original, err = bp.setPcBreakPoint(pc); err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func (bp *BP)SetInternalBreakPoint(pc uint64) (*BInfo, error)  {
 	return bInfo, nil
 }
 
-func (bp* BP)SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error) {
+func (bp *BP) SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error) {
 	logger.Debug("SetFileLineBreakPoint", zap.String("filename", filename), zap.Int("lineno", lineno))
 	curDir, err := os.Getwd()
 	if err != nil {
@@ -101,10 +101,10 @@ func (bp* BP)SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error) 
 		zap.Int("lineno", lineno))
 
 	var (
-		info *BInfo
+		info     *BInfo
 		original []byte
 	)
-	if original, err = bp.setPcBreakPoint(pc); err != nil{
+	if original, err = bp.setPcBreakPoint(pc); err != nil {
 		logger.Error("SetFileLineBreakPoint",
 			zap.Error(err),
 			zap.Int("Pid", cmd.Process.Pid),
@@ -118,11 +118,11 @@ func (bp* BP)SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error) 
 	return info, err
 }
 
-func (bp *BP)Continue() error {
+func (bp *BP) Continue() error {
 	return syscall.PtraceCont(cmd.Process.Pid, 0)
 }
 
-func (bp *BP) findBreakPoint(pc uint64) (*BInfo , bool) {
+func (bp *BP) findBreakPoint(pc uint64) (*BInfo, bool) {
 	for _, v := range bp.infos {
 		if v.pc == pc {
 			return v, true
@@ -131,7 +131,7 @@ func (bp *BP) findBreakPoint(pc uint64) (*BInfo , bool) {
 	return nil, false
 }
 
-func (bp *BP)enableBreakPoint (info *BInfo) error {
+func (bp *BP) enableBreakPoint(info *BInfo) error {
 	if info == nil {
 		return errors.New("enableBreakPoint breakpointinfo is null")
 	}
@@ -142,7 +142,7 @@ func (bp *BP)enableBreakPoint (info *BInfo) error {
 	return nil
 }
 
-func (bp *BP)disableBreakPoint(info *BInfo) error {
+func (bp *BP) disableBreakPoint(info *BInfo) error {
 	if info == nil {
 		return errors.New("disableBreakPoint breakpointinfo is null")
 	}
@@ -154,12 +154,12 @@ func (bp *BP)disableBreakPoint(info *BInfo) error {
 }
 
 /* version 2 */
-func (bp *BP)singleStepInstructionWithBreakpointCheck_v2() error {
+func (bp *BP) singleStepInstructionWithBreakpointCheck_v2() error {
 	var (
-		pc uint64
-		err error
+		pc   uint64
+		err  error
 		info *BInfo
-		ok bool
+		ok   bool
 	)
 
 	if pc, err = getPtracePc(); err != nil {
@@ -169,8 +169,8 @@ func (bp *BP)singleStepInstructionWithBreakpointCheck_v2() error {
 	if info, ok = bp.findBreakPoint(pc); !ok {
 		return nil
 	}
-	if err = bp.disableBreakPoint(info); err !=nil {
-		return  err
+	if err = bp.disableBreakPoint(info); err != nil {
+		return err
 	}
 	defer bp.enableBreakPoint(info)
 
@@ -195,17 +195,17 @@ func (bp *BP)singleStepInstructionWithBreakpointCheck_v2() error {
 	return fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal())
 }
 
-func (bp *BP)singleStepInstructionWithBreakpointCheck() (bool, error) {
+func (bp *BP) singleStepInstructionWithBreakpointCheck() (bool, error) {
 	var (
-		pc uint64
-		err error
+		pc   uint64
+		err  error
 		info *BInfo
-		ok bool
+		ok   bool
 
-		inst x86asm.Inst
+		inst        x86asm.Inst
 		interBpInfo *BInfo
 	)
-	if pc, err  = getPtracePc(); err != nil {
+	if pc, err = getPtracePc(); err != nil {
 		return true, err
 	}
 	pc = pc - 1
@@ -221,7 +221,7 @@ func (bp *BP)singleStepInstructionWithBreakpointCheck() (bool, error) {
 	}
 
 	if interBpInfo, err = bp.SetInternalBreakPoint(pc + uint64(inst.Len)); err != nil {
-		if  err != HasExistedBreakPointErr {
+		if err != HasExistedBreakPointErr {
 			return true, err
 		}
 		err = nil
@@ -250,11 +250,11 @@ func (bp *BP)singleStepInstructionWithBreakpointCheck() (bool, error) {
 		return true, nil
 	}
 
-	if pc, err  = getPtracePc(); err != nil {
+	if pc, err = getPtracePc(); err != nil {
 		return true, err
 	}
 
-	if interBpInfo == nil || pc - 1 != interBpInfo.pc {
+	if interBpInfo == nil || pc-1 != interBpInfo.pc {
 		return false, nil
 	} else {
 		if err = setPcRegister(pc - 1); err != nil {
@@ -265,7 +265,7 @@ func (bp *BP)singleStepInstructionWithBreakpointCheck() (bool, error) {
 	return true, nil
 }
 
-func (bp *BP)clearInternalBreakPoint(pc uint64) {
+func (bp *BP) clearInternalBreakPoint(pc uint64) {
 	infos := make([]*BInfo, 0, len(bp.infos))
 	for _, v := range bp.infos {
 		if !(v.kind == INTERNALBPTYPE && v.pc == pc) {
@@ -275,7 +275,7 @@ func (bp *BP)clearInternalBreakPoint(pc uint64) {
 	bp.infos = infos
 }
 
-func (bp *BP)SetBpWhenRestart() error {
+func (bp *BP) SetBpWhenRestart() error {
 	for _, v := range bp.infos {
 		if v.kind == INTERNALBPTYPE {
 			bp.clearInternalBreakPoint(v.pc)

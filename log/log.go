@@ -33,7 +33,6 @@ func init() {
 		level = zapcore.PanicLevel
 	}
 
-
 	/*http.HandleFunc("/debug", func(w http.ResponseWriter, r *http.Request) {
 		lv := r.PostFormValue("level")
 		if lv == "" {

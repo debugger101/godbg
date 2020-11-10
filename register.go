@@ -2,7 +2,7 @@ package main
 
 import "syscall"
 
-func getRegisters() (syscall.PtraceRegs, error){
+func getRegisters() (syscall.PtraceRegs, error) {
 	var prs syscall.PtraceRegs
 	if cmd.Process == nil {
 		return prs, NoProcessRuning
@@ -34,7 +34,7 @@ func setPcRegister(pc uint64) error {
 	return syscall.PtraceSetRegs(cmd.Process.Pid, &prs)
 }
 
-func getPtraceBp() (uint64, error){
+func getPtraceBp() (uint64, error) {
 	var (
 		prs syscall.PtraceRegs
 		err error

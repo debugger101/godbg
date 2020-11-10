@@ -22,11 +22,11 @@ func printHelper() {
 }
 
 func printUnsupportCmd(cmd string) {
-	fmt.Fprintf(stderr,"unsupport cmd `%s`\n", cmd)
+	fmt.Fprintf(stderr, "unsupport cmd `%s`\n", cmd)
 }
 
 func printHasExistedBreakPoint(place string) {
-	fmt.Fprintf(stderr,"existed breakpoint %s\n", place)
+	fmt.Fprintf(stderr, "existed breakpoint %s\n", place)
 }
 
 func printNotFoundSourceLineErr(place string) {
@@ -34,14 +34,14 @@ func printNotFoundSourceLineErr(place string) {
 }
 
 func printErr(err error) {
-	fmt.Fprintf(stderr,"%s\n", err.Error())
+	fmt.Fprintf(stderr, "%s\n", err.Error())
 }
 
 func printNoProcessErr() {
-	fmt.Fprintf(stderr,"%s\n", NoProcessRuning.Error())
+	fmt.Fprintf(stderr, "%s\n", NoProcessRuning.Error())
 }
 
 func printExit0(opid int) {
-	fmt.Fprintf(stderr,"Process %d has exited with status 0\n", opid)
+	fmt.Fprintf(stderr, "Process %d has exited with status 0\n", opid)
 
 }

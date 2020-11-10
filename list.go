@@ -12,7 +12,7 @@ import (
 
 func listFileLineByPtracePc(rangeline int) error {
 	pc, err := getPtracePc()
-	if err != nil{
+	if err != nil {
 		return err
 	}
 	filename, lineno, err := bi.pcTofileLine(pc)
@@ -23,7 +23,7 @@ func listFileLineByPtracePc(rangeline int) error {
 	return listFileLine(filename, lineno, rangeline)
 }
 
-func listFileLine(filename string, lineno int, rangeline int) error{
+func listFileLine(filename string, lineno int, rangeline int) error {
 	rangeMin := lineno - rangeline - 1
 	rangeMax := lineno + rangeline - 1
 
@@ -31,7 +31,7 @@ func listFileLine(filename string, lineno int, rangeline int) error{
 		rangeMin = 1
 	}
 
-	if rangeMax - rangeMin <= 0 {
+	if rangeMax-rangeMin <= 0 {
 		return errors.New("not right linenoe or rangeline")
 	}
 
@@ -42,7 +42,7 @@ func listFileLine(filename string, lineno int, rangeline int) error{
 	defer file.Close()
 	reader := bufio.NewReader(file)
 
-	listFileLineBytesSlice := make([]string, 0, rangeMax - rangeMin + 2)
+	listFileLineBytesSlice := make([]string, 0, rangeMax-rangeMin+2)
 
 	listFileLineBytesSlice = append(listFileLineBytesSlice, fmt.Sprintf("list %s:%d\n", filename, lineno))
 	var curLine int

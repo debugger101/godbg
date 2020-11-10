@@ -63,17 +63,16 @@ const (
 	RuleFramePointer // Value is stored at address rule.Reg + rule.Offset, but only if it's less than the current CFA, otherwise same value
 )
 
-
 type DWRule struct {
-	offset     int64
-	reg        uint64
-	rule 	   Rule
+	offset int64
+	reg    uint64
+	rule   Rule
 }
 
 func execSingleInstruction(frame *Frame, buf *bytes.Buffer) error {
 	var (
 		byte byte
-		err error
+		err  error
 	)
 
 	if byte, err = buf.ReadByte(); err != nil {
@@ -91,8 +90,8 @@ func execSingleInstruction(frame *Frame, buf *bytes.Buffer) error {
 			return err
 		}
 	case DW_CFA_restore:
-		byte= DW_CFA_restore
-		if err = buf.UnreadByte();err != nil {
+		byte = DW_CFA_restore
+		if err = buf.UnreadByte(); err != nil {
 			return err
 		}
 	}
@@ -100,7 +99,7 @@ func execSingleInstruction(frame *Frame, buf *bytes.Buffer) error {
 	switch byte {
 	case DW_CFA_offset_extended:
 		reg, _, _ := DecodeULEB128(buf)
-		offset,_, _ := DecodeULEB128(buf)
+		offset, _, _ := DecodeULEB128(buf)
 		frame.regsRule[reg] = DWRule{offset: int64(offset) * frame.cie.data_alignment_factor, rule: RuleOffset}
 		logger.Debug(fmt.Sprintf("DW_CFA_offset_extended, reg %d, offset %d, dwrule.offset %d\n", reg, offset, frame.regsRule[reg].offset))
 	case DW_CFA_def_cfa:
@@ -108,18 +107,18 @@ func execSingleInstruction(frame *Frame, buf *bytes.Buffer) error {
 		offset, _, _ := DecodeULEB128(buf)
 		frame.cfa.offset = int64(offset)
 		frame.cfa.rule = RuleCFA
-		logger.Debug(fmt.Sprintf( "DW_CFA_def_cfa, reg %d, offset %d\n", frame.cfa.reg, frame.cfa.offset))
+		logger.Debug(fmt.Sprintf("DW_CFA_def_cfa, reg %d, offset %d\n", frame.cfa.reg, frame.cfa.offset))
 	case DW_CFA_def_cfa_register:
 		reg, _, _ := DecodeULEB128(buf)
 		frame.cfa.reg = reg
 		frame.cfa.rule = RuleUndefined
-		logger.Debug(fmt.Sprintf( "DW_CFA_def_cfa_register, cfa.reg %d, cfa.offset %d\n", reg, frame.cfa.offset))
+		logger.Debug(fmt.Sprintf("DW_CFA_def_cfa_register, cfa.reg %d, cfa.offset %d\n", reg, frame.cfa.offset))
 	case DW_CFA_def_cfa_offset_sf:
-		offset, _ , _:= DecodeSLEB128(buf)
+		offset, _, _ := DecodeSLEB128(buf)
 		t := offset
 		offset *= frame.cie.data_alignment_factor
 		frame.cfa.offset = offset
-		logger.Debug(fmt.Sprintf( "DW_CFA_def_cfa_offset_sf, offset *= frame.data_aligment_factor, %d = %d * %d\n",
+		logger.Debug(fmt.Sprintf("DW_CFA_def_cfa_offset_sf, offset *= frame.data_aligment_factor, %d = %d * %d\n",
 			offset, t, frame.cie.data_alignment_factor))
 	case DW_CFA_advance_loc:
 		if byte, err = buf.ReadByte(); err != nil {
@@ -127,30 +126,30 @@ func execSingleInstruction(frame *Frame, buf *bytes.Buffer) error {
 		}
 		delta := byte & low_6_offset
 		frame.loc += uint64(delta) * frame.cie.code_alignment_factor
-		logger.Debug(fmt.Sprintf( "DW_CFA_advance_loc, delta %d, frame.loc=%d\n", uint64(delta), frame.loc))
+		logger.Debug(fmt.Sprintf("DW_CFA_advance_loc, delta %d, frame.loc=%d\n", uint64(delta), frame.loc))
 	case DW_CFA_advance_loc1:
 		delta, err := buf.ReadByte()
 		if err != nil {
 			return err
 		}
 		frame.loc += uint64(delta) * frame.cie.code_alignment_factor
-		logger.Debug(fmt.Sprintf( "DW_CFA_advance_loc1, delta %d, frame.loc=%d\n", uint64(delta), frame.loc))
+		logger.Debug(fmt.Sprintf("DW_CFA_advance_loc1, delta %d, frame.loc=%d\n", uint64(delta), frame.loc))
 	case DW_CFA_advance_loc2:
 		var delta uint16
 		binary.Read(buf, binary.LittleEndian, &delta)
 		frame.loc += uint64(delta) * frame.cie.code_alignment_factor
-		logger.Debug(fmt.Sprintf( "DW_CFA_advance_loc2, delta %d, frame.loc=%d\n", uint64(delta), frame.loc))
+		logger.Debug(fmt.Sprintf("DW_CFA_advance_loc2, delta %d, frame.loc=%d\n", uint64(delta), frame.loc))
 	case DW_CFA_restore:
 		if byte, err = buf.ReadByte(); err != nil {
 			return err
 		}
 		reg := uint64(byte & low_6_offset)
 		frame.regsRule[reg] = DWRule{rule: RuleUndefined}
- 	case DW_CFA_nop:
+	case DW_CFA_nop:
 		return nil
 	default:
-		logger.Error("execInstructions unknown byte", zap.Uint8("DW_CFA",byte))
-		return fmt.Errorf("execInstructions unknown byte %v",byte)
+		logger.Error("execInstructions unknown byte", zap.Uint8("DW_CFA", byte))
+		return fmt.Errorf("execInstructions unknown byte %v", byte)
 	}
 	return nil
 }

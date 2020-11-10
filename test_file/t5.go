@@ -9,7 +9,7 @@ type A struct {
 func main() {
 	godbgvstr := "hello world"
 	godbgvint := uint64(100)
-	godbgvstruct := A{a : "hello a"}
+	godbgvstruct := A{a: "hello a"}
 
 	fmt.Printf("%s %d %v\n", godbgvstr, godbgvint, godbgvstruct)
 }
