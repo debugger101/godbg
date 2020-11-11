@@ -10,7 +10,7 @@ import (
 	"syscall"
 )
 
-func disassemble(lowpc uint64, highpc uint64) (map[uint64]bool, [][]byte, []uint64, []x86asm.Inst, error) {
+func disassemble(pid int, bp *BP, lowpc uint64, highpc uint64) (map[uint64]bool, [][]byte, []uint64, []x86asm.Inst, error) {
 	if highpc-lowpc <= 0 {
 		return nil, nil, nil, nil, fmt.Errorf("[disassemble] invalid input: lowpc %d highpc %d", lowpc, highpc)
 	}
@@ -24,7 +24,7 @@ func disassemble(lowpc uint64, highpc uint64) (map[uint64]bool, [][]byte, []uint
 		pcMap   map[uint64]bool
 		curMem  []byte
 	)
-	if n, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(lowpc), mem); err != nil {
+	if n, err = syscall.PtracePeekData(pid, uintptr(lowpc), mem); err != nil {
 		return nil, nil, nil, nil, err
 	}
 	mem = mem[:n]
@@ -82,7 +82,7 @@ func tryCuttingFilename(filename string) string {
 	return filename
 }
 
-func listDisassembleByPtracePc() error {
+func listDisassembleByPtracePc(bi *BI, bp *BP, pid int) error {
 	var (
 		pc       uint64
 		pcs      []uint64
@@ -101,12 +101,12 @@ func listDisassembleByPtracePc() error {
 	if f, err = bi.findFunctionIncludePc(pc); err != nil {
 		return err
 	}
-	if pcBpMap, mems, pcs, amsInsts, err = disassemble(f.lowpc, f.highpc); err != nil {
+	if pcBpMap, mems, pcs, amsInsts, err = disassemble(pid, bp, f.lowpc, f.highpc); err != nil {
 		return err
 	}
 	out := make([]string, 0, len(amsInsts))
 
-	fmt.Fprintf(stdout, "current process pc = %d\n", pc)
+	fmt.Fprintf(stdout, "current process pc = 0x%x\n", pc)
 	for i, amsInst := range amsInsts {
 		curpc := pcs[i]
 		if filename, lineno, err = bi.pcTofileLine(curpc); err != nil {
@@ -123,7 +123,7 @@ func listDisassembleByPtracePc() error {
 			bpFlag += "     "
 		}
 
-		out = append(out, fmt.Sprintf("%s%s:%-7d %-7d %-20x %s\n", bpFlag, path.Base(filename), lineno, curpc, mems[i], amsInst.String()))
+		out = append(out, fmt.Sprintf("%s%s:%-7d 0x%-7x %-20x %s\n", bpFlag, path.Base(filename), lineno, curpc, mems[i], amsInst.String()))
 	}
 	fmt.Fprintln(stdout, strings.Join(out, ""))
 	return nil

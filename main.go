@@ -8,15 +8,11 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"os"
-	"os/exec"
 )
 
 var (
-	bp       = &BP{}
-	logger   = log.Log
-	bi       *BI
-	cmd      *exec.Cmd
-	execfile string
+	target *Target
+	logger = log.Log
 
 	stdin  io.Reader
 	stdout io.Writer
@@ -32,6 +28,7 @@ func main() {
 	stdin = os.Stdin
 	stdout = os.Stdout
 	stderr = os.Stderr
+	target = &Target{bi: &BI{}, bp: &BP{}}
 
 	if err = checkArgs(); err != nil {
 		logger.Error(err.Error(), zap.String("stage", "checkArgs"), zap.Strings("args", os.Args))
@@ -47,29 +44,29 @@ func main() {
 	}
 
 	// step 2, build the filename into executable file
-	if execfile, err = build(filename); err != nil {
+	if target.execFile, err = build(filename); err != nil {
 		logger.Error(err.Error(), zap.String("stage", "build"), zap.String("filename", filename))
 		printExecutableProgramHelper()
 		return
 	}
-	defer os.Remove(execfile)
+	defer os.Remove(target.execFile)
 
 	// step 3, analyze executable file; The most import places are "_debug_info", "_debug_line"
-	if bi, err = analyze(execfile); err != nil {
+	if target.bi, err = analyze(target.execFile); err != nil {
 		logger.Error(err.Error(), zap.String("stage", "analyze"),
-			zap.String("filename", filename), zap.String("execfile", execfile))
+			zap.String("filename", filename), zap.String("execfile", target.execFile))
 		printExecutableProgramHelper()
 		return
 	}
 
 	// step 4, run executable file
-	if cmd, err = runexec(execfile); err != nil {
+	if target.cmd, err = runexec(target.execFile); err != nil {
 		logger.Error(err.Error(), zap.String("stage", "runexec"),
-			zap.String("filename", filename), zap.String("execfile", execfile))
+			zap.String("filename", filename), zap.String("execfile", target.execFile))
 		printExecutableProgramHelper()
 		return
 	}
-	fmt.Fprintf(stdout, "trace cur process pid %d\n", cmd.Process.Pid)
+	fmt.Fprintf(stdout, "trace cur process pid %d\n", target.cmd.Process.Pid)
 
 	// step 5, run prompt. `executor` handle all input
 	p = prompt.New(

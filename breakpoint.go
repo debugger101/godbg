@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
-	"golang.org/x/arch/x86/x86asm"
 	"os"
 	"path"
 	"syscall"
@@ -20,6 +19,7 @@ type BInfo struct {
 
 type BP struct {
 	infos []*BInfo
+	pid   int
 }
 
 type BPKIND uint64
@@ -39,7 +39,7 @@ func (b *BPKIND) String() string {
 	return "unknown"
 }
 
-func (bp *BP) setPcBreakPoint(pc uint64) ([]byte, error) {
+func (bp *BP) setPcBreakPoint(pid int, pc uint64) ([]byte, error) {
 	// no need to add RwLock
 	var err error
 	if bp.infos == nil {
@@ -52,12 +52,12 @@ func (bp *BP) setPcBreakPoint(pc uint64) ([]byte, error) {
 	}
 
 	original := make([]byte, 1)
-	_, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(pc), original)
+	_, err = syscall.PtracePeekData(pid, uintptr(pc), original)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = syscall.PtracePokeData(cmd.Process.Pid, uintptr(pc), []byte{0xCC})
+	_, err = syscall.PtracePokeData(pid, uintptr(pc), []byte{0xCC})
 	if err != nil {
 		return nil, err
 	}
@@ -65,12 +65,12 @@ func (bp *BP) setPcBreakPoint(pc uint64) ([]byte, error) {
 	return original, nil
 }
 
-func (bp *BP) SetInternalBreakPoint(pc uint64) (*BInfo, error) {
+func (bp *BP) SetInternalBreakPoint(pid int, pc uint64) (*BInfo, error) {
 	var (
 		original []byte
 		err      error
 	)
-	if original, err = bp.setPcBreakPoint(pc); err != nil {
+	if original, err = bp.setPcBreakPoint(pid, pc); err != nil {
 		return nil, err
 	}
 
@@ -79,7 +79,7 @@ func (bp *BP) SetInternalBreakPoint(pc uint64) (*BInfo, error) {
 	return bInfo, nil
 }
 
-func (bp *BP) SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error) {
+func (bp *BP) SetFileLineBreakPoint(bi *BI, pid int, filename string, lineno int) (*BInfo, error) {
 	logger.Debug("SetFileLineBreakPoint", zap.String("filename", filename), zap.Int("lineno", lineno))
 	curDir, err := os.Getwd()
 	if err != nil {
@@ -104,10 +104,10 @@ func (bp *BP) SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error)
 		info     *BInfo
 		original []byte
 	)
-	if original, err = bp.setPcBreakPoint(pc); err != nil {
+	if original, err = bp.setPcBreakPoint(pid, pc); err != nil {
 		logger.Error("SetFileLineBreakPoint",
 			zap.Error(err),
-			zap.Int("Pid", cmd.Process.Pid),
+			zap.Int("Pid", pid),
 			zap.String("fullfilename", fullfilename),
 			zap.Int("lineno", lineno))
 		return nil, err
@@ -118,8 +118,8 @@ func (bp *BP) SetFileLineBreakPoint(filename string, lineno int) (*BInfo, error)
 	return info, err
 }
 
-func (bp *BP) Continue() error {
-	return syscall.PtraceCont(cmd.Process.Pid, 0)
+func (bp *BP) Continue(pid int) error {
+	return syscall.PtraceCont(pid, 0)
 }
 
 func (bp *BP) findBreakPoint(pc uint64) (*BInfo, bool) {
@@ -131,30 +131,29 @@ func (bp *BP) findBreakPoint(pc uint64) (*BInfo, bool) {
 	return nil, false
 }
 
-func (bp *BP) enableBreakPoint(info *BInfo) error {
+func (bp *BP) enableBreakPoint(pid int, info *BInfo) error {
 	if info == nil {
 		return errors.New("enableBreakPoint breakpointinfo is null")
 	}
 	logger.Debug("enableBreakPoint", zap.Uint64("pc", info.pc))
-	if _, err := syscall.PtracePokeData(cmd.Process.Pid, uintptr(info.pc), []byte{0xCC}); err != nil {
+	if _, err := syscall.PtracePokeData(pid, uintptr(info.pc), []byte{0xCC}); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (bp *BP) disableBreakPoint(info *BInfo) error {
+func (bp *BP) disableBreakPoint(pid int, info *BInfo) error {
 	if info == nil {
 		return errors.New("disableBreakPoint breakpointinfo is null")
 	}
 	logger.Debug("disableBreakPoint", zap.Uint64("pc", info.pc))
-	if _, err := syscall.PtracePokeData(cmd.Process.Pid, uintptr(info.pc), info.original); err != nil {
+	if _, err := syscall.PtracePokeData(pid, uintptr(info.pc), info.original); err != nil {
 		return err
 	}
 	return nil
 }
 
-/* version 2 */
-func (bp *BP) singleStepInstructionWithBreakpointCheck_v2() error {
+func (bp *BP) singleStepInstructionWithBreakpointCheck(pid int) error {
 	var (
 		pc   uint64
 		err  error
@@ -169,20 +168,20 @@ func (bp *BP) singleStepInstructionWithBreakpointCheck_v2() error {
 	if info, ok = bp.findBreakPoint(pc); !ok {
 		return nil
 	}
-	if err = bp.disableBreakPoint(info); err != nil {
+	if err = bp.disableBreakPoint(pid, info); err != nil {
 		return err
 	}
-	defer bp.enableBreakPoint(info)
+	defer bp.enableBreakPoint(pid, info)
 
-	if err = setPcRegister(pc); err != nil {
+	if err = setPcRegister(target.cmd, pc); err != nil {
 		return err
 	}
 
-	if err = syscall.PtraceSingleStep(cmd.Process.Pid); err != nil {
+	if err = syscall.PtraceSingleStep(pid); err != nil {
 		return err
 	}
 	var s syscall.WaitStatus
-	if _, err = syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil); err != nil {
+	if _, err = syscall.Wait4(pid, &s, syscall.WALL, nil); err != nil {
 		return err
 	}
 	if s.Exited() {
@@ -195,76 +194,6 @@ func (bp *BP) singleStepInstructionWithBreakpointCheck_v2() error {
 	return fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal())
 }
 
-func (bp *BP) singleStepInstructionWithBreakpointCheck() (bool, error) {
-	var (
-		pc   uint64
-		err  error
-		info *BInfo
-		ok   bool
-
-		inst        x86asm.Inst
-		interBpInfo *BInfo
-	)
-	if pc, err = getPtracePc(); err != nil {
-		return true, err
-	}
-	pc = pc - 1
-	if info, ok = bp.findBreakPoint(pc); !ok {
-		return true, nil
-	}
-	if err = bp.disableBreakPoint(info); err != nil {
-		return true, err
-	}
-	defer bp.enableBreakPoint(info)
-	if inst, err = bi.getSingleMemInst(pc); err != nil {
-		return true, err
-	}
-
-	if interBpInfo, err = bp.SetInternalBreakPoint(pc + uint64(inst.Len)); err != nil {
-		if err != HasExistedBreakPointErr {
-			return true, err
-		}
-		err = nil
-	} else {
-		defer func() {
-			bp.disableBreakPoint(interBpInfo)
-			bp.clearInternalBreakPoint(interBpInfo.pc)
-		}()
-	}
-
-	if err = setPcRegister(pc); err != nil {
-		return true, err
-	}
-
-	if err := syscall.PtraceCont(cmd.Process.Pid, 0); err != nil {
-		return true, err
-	}
-
-	var s syscall.WaitStatus
-	if _, err = syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil); err != nil {
-		return true, err
-	}
-	status := (syscall.WaitStatus)(s)
-
-	if status.Exited() {
-		return true, nil
-	}
-
-	if pc, err = getPtracePc(); err != nil {
-		return true, err
-	}
-
-	if interBpInfo == nil || pc-1 != interBpInfo.pc {
-		return false, nil
-	} else {
-		if err = setPcRegister(pc - 1); err != nil {
-			return true, err
-		}
-	}
-
-	return true, nil
-}
-
 func (bp *BP) clearInternalBreakPoint(pc uint64) {
 	infos := make([]*BInfo, 0, len(bp.infos))
 	for _, v := range bp.infos {
@@ -275,13 +204,13 @@ func (bp *BP) clearInternalBreakPoint(pc uint64) {
 	bp.infos = infos
 }
 
-func (bp *BP) SetBpWhenRestart() error {
+func (bp *BP) SetBpWhenRestart(pid int) error {
 	for _, v := range bp.infos {
 		if v.kind == INTERNALBPTYPE {
 			bp.clearInternalBreakPoint(v.pc)
 		}
 		if v.kind == USERBPTYPE {
-			if err := bp.enableBreakPoint(v); err != nil {
+			if err := bp.enableBreakPoint(pid, v); err != nil {
 				return err
 			}
 		}

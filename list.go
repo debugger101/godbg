@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func listFileLineByPtracePc(rangeline int) error {
+func listFileLineByPtracePc(bi *BI, rangeline int) error {
 	pc, err := getPtracePc()
 	if err != nil {
 		return err

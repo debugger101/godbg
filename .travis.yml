@@ -7,8 +7,8 @@ os:
 matrix:
   fast_finish: true
   include:
-  - go: 1.12.x
-    env: GO111MODULE=on
+  - go: 1.15.2
+    env: GO111MODULE=on GODEBUG=asyncpreemptoff=1
 
 script:
     - make test
