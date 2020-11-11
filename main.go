@@ -35,21 +35,21 @@ func main() {
 
 	if err = checkArgs(); err != nil {
 		logger.Error(err.Error(), zap.String("stage", "checkArgs"), zap.Strings("args", os.Args))
-		printHelper()
+		printExecutableProgramHelper()
 		return
 	}
 
 	// step 1, get absolute filename
 	if filename, err = absoluteFilename(); err != nil {
 		logger.Error(err.Error(), zap.String("stage", "absolute"), zap.String("filename", filename))
-		printHelper()
+		printExecutableProgramHelper()
 		return
 	}
 
 	// step 2, build the filename into executable file
 	if execfile, err = build(filename); err != nil {
 		logger.Error(err.Error(), zap.String("stage", "build"), zap.String("filename", filename))
-		printHelper()
+		printExecutableProgramHelper()
 		return
 	}
 	defer os.Remove(execfile)
@@ -58,7 +58,7 @@ func main() {
 	if bi, err = analyze(execfile); err != nil {
 		logger.Error(err.Error(), zap.String("stage", "analyze"),
 			zap.String("filename", filename), zap.String("execfile", execfile))
-		printHelper()
+		printExecutableProgramHelper()
 		return
 	}
 
@@ -66,7 +66,7 @@ func main() {
 	if cmd, err = runexec(execfile); err != nil {
 		logger.Error(err.Error(), zap.String("stage", "runexec"),
 			zap.String("filename", filename), zap.String("execfile", execfile))
-		printHelper()
+		printExecutableProgramHelper()
 		return
 	}
 	fmt.Fprintf(stdout, "trace cur process pid %d\n", cmd.Process.Pid)

@@ -16,6 +16,8 @@ import (
 	"unsafe"
 )
 
+// executor will exec for input.
+// please keep the sync of printCmdHelper in error.go
 func executor(input string) {
 	logger.Debug("executor", zap.String("input", input))
 	if len(input) == 0 {
@@ -637,6 +639,12 @@ func executor(input string) {
 					fmt.Fprintf(stderr, "not support dwarf variable %#v", fv)
 				}
 			}
+			return
+		}
+	case 'h':
+		sps := strings.Split(input, " ")
+		if len(sps) == 1 && (sps[0] == "h" || sps[0] == "help") {
+			printCmdHelper()
 			return
 		}
 	}
