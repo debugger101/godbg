@@ -16,6 +16,8 @@ import (
 	"unsafe"
 )
 
+// executor will exec for input.
+// please keep the sync of printCmdHelper in error.go
 func executor(input string) {
 	logger.Debug("executor", zap.String("input", input))
 	if len(input) == 0 {
@@ -23,11 +25,19 @@ func executor(input string) {
 	}
 	fs := input[0]
 
+	cmd := target.cmd
+	bp := target.bp
+	bi := target.bi
+	pid := int(0)
+	if cmd != nil && cmd.Process != nil {
+		pid = cmd.Process.Pid
+	}
+
 	switch fs {
 	case 'q':
 		if input == "q" || input == "quit" {
 			if cmd.Process != nil {
-				if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
+				if err := syscall.Kill(cmd.Process.Pid, syscall.SIGKILL); err != nil {
 					// printErr(err)
 				}
 			}
@@ -44,7 +54,7 @@ func executor(input string) {
 				printUnsupportCmd(input)
 				return
 			}
-			if bInfo, err := bp.SetFileLineBreakPoint(filename, line); err != nil {
+			if bInfo, err := bp.SetFileLineBreakPoint(bi, pid, filename, line); err != nil {
 				if err == HasExistedBreakPointErr {
 					printHasExistedBreakPoint(sps[1])
 					return
@@ -61,12 +71,19 @@ func executor(input string) {
 			return
 		}
 		if len(sps) == 2 && (sps[0] == "bc" || sps[0] == "bclear") {
-
+			curPc, err := getPtracePc()
+			if err != nil {
+				printErr(fmt.Errorf("can't find pc register, err:%s", err.Error()))
+				return
+			}
 			if sps[1] == "all" {
 				tmp := make([]*BInfo, 0, len(bp.infos))
 				for _, v := range bp.infos {
 					if v.kind == USERBPTYPE {
-						bp.disableBreakPoint(v)
+						_ = bp.disableBreakPoint(pid, v)
+						if v.pc == curPc-1 {
+							_ = setPcRegister(cmd, v.pc)
+						}
 					} else {
 						tmp = append(tmp, v)
 					}
@@ -84,9 +101,12 @@ func executor(input string) {
 					if v.kind == USERBPTYPE {
 						count++
 						if count == needClearIndex {
-							bp.disableBreakPoint(v)
+							_ = bp.disableBreakPoint(pid, v)
+							if v.pc == curPc-1 {
+								_ = setPcRegister(cmd, v.pc)
+							}
 							bp.infos = append(bp.infos[:i], bp.infos[(i+1):len(bp.infos)]...)
-							fmt.Fprintf(stdout, "clear breakpoint %d successfully, resort breakpoint again\n", needClearIndex)
+							_, _ = fmt.Fprintf(stdout, "clear breakpoint %d successfully, resort breakpoint again\n", needClearIndex)
 							return
 						}
 					}
@@ -100,7 +120,7 @@ func executor(input string) {
 			for _, v := range bp.infos {
 				if v.kind == USERBPTYPE {
 					count++
-					fmt.Fprintf(stdout, "%-2d. %s:%d, pc %d\n", count, v.filename, v.lineno, v.pc)
+					fmt.Fprintf(stdout, "%-2d. %s:%d, pc 0x%x\n", count, v.filename, v.lineno, v.pc)
 				}
 			}
 			if count == 0 {
@@ -112,7 +132,7 @@ func executor(input string) {
 			count := 0
 			for _, v := range bp.infos {
 				count++
-				fmt.Fprintf(stdout, "%-2d. %s:%d, pc %d, type %s\n", count, v.filename, v.lineno, v.pc, v.kind.String())
+				fmt.Fprintf(stdout, "%-2d. %s:%d, pc 0x%x, type %s\n", count, v.filename, v.lineno, v.pc, v.kind.String())
 			}
 			if count == 0 {
 				fmt.Fprintf(stdout, "there is no breakpoint\n")
@@ -131,10 +151,12 @@ func executor(input string) {
 			)
 			if rbp, err = getPtraceBp(); err != nil {
 				printErr(err)
+				printErr(fmt.Errorf("!!1 %s", err.Error()))
 				return
 			}
 			if pc, err = getPtracePc(); err != nil {
 				printErr(err)
+				printErr(fmt.Errorf("!!2 %s", err.Error()))
 				return
 			}
 
@@ -143,12 +165,16 @@ func executor(input string) {
 			}
 			if filename, line, err = bi.pcTofileLine(pc); err != nil {
 				printErr(err)
+				printErr(fmt.Errorf("!!3 %s", err.Error()))
 				return
 			}
 			fmt.Fprintf(stdout, "%s:%d\n", filename, line)
 
 			ret := uint64(0)
 			for {
+				if uintptr(rbp) == 0 {
+					break
+				}
 				original := make([]byte, 16)
 				_, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(rbp), original)
 				if err != nil {
@@ -157,7 +183,6 @@ func executor(input string) {
 				}
 				reader := bytes.NewBuffer(original)
 
-				//fmt.Fprintf(stdout, "rbp %d\n", rbp)
 				if err = binary.Read(reader, binary.LittleEndian, &rbp); err != nil {
 					printErr(err)
 					return
@@ -172,21 +197,11 @@ func executor(input string) {
 					return
 				}
 				if f, err = bi.findFunctionIncludePc(ret - 1); err != nil {
-					// printErr(err)
+					printErr(err)
 					return
 				}
 				fmt.Fprintf(stdout, "%s:%d %s\n", filename, line, f.name)
 			}
-
-			/*
-				reader = bytes.NewBuffer(original[32:])
-				if err = binary.Read(reader, binary.LittleEndian, &tmp); err != nil {
-					printErr(err)
-					return
-				}
-				fmt.Fprintf(stdout, "%d\n", tmp)
-			*/
-			// strings.NewReader(original[:16])
 
 			return
 		}
@@ -197,42 +212,11 @@ func executor(input string) {
 				printNoProcessErr()
 				return
 			}
-
-			/*
-				version 1
-				if ok, err := bp.singleStepInstructionWithBreakpointCheck(); err != nil {
-					printErr(err)
-					return
-				} else if ok {
-					if err := bp.Continue(); err != nil {
-						printErr(err)
-						return
-					}
-					var s syscall.WaitStatus
-					wpid, err := syscall.Wait4(cmd.Process.Pid, &s, syscall.WALL, nil)
-					if err != nil {
-						printErr(err)
-						return
-					}
-					status := (syscall.WaitStatus)(s)
-					if status.Exited() {
-						// TODO
-						if cmd.Process != nil && wpid == cmd.Process.Pid {
-							printExit0(wpid)
-						} else {
-							printExit0(wpid)
-						}
-						cmd.Process = nil
-						return
-					}
-				}*/
-
-			/* version 2 */
-			if err := bp.singleStepInstructionWithBreakpointCheck_v2(); err != nil {
+			if err := bp.singleStepInstructionWithBreakpointCheck(pid); err != nil {
 				printErr(err)
 				return
 			}
-			if err := bp.Continue(); err != nil {
+			if err := bp.Continue(pid); err != nil {
 				printErr(err)
 				return
 			}
@@ -262,8 +246,8 @@ func executor(input string) {
 				printErr(err)
 				return
 			}
-			fmt.Fprintf(stdout, "current process pc = %d\n", pc)
-			if err = listFileLineByPtracePc(6); err != nil {
+			fmt.Fprintf(stdout, "current process pc = 0x%x\n", pc)
+			if err = listFileLineByPtracePc(target.bi, 6); err != nil {
 				printErr(err)
 				return
 			}
@@ -297,20 +281,20 @@ func executor(input string) {
 				}
 
 				if !(filename == oldfilename && lineno == oldlineno) {
-					fmt.Fprintf(stdout, "current process pc = %d\n", pc)
-					if err = listFileLineByPtracePc(6); err != nil {
+					fmt.Fprintf(stdout, "current process pc = 0x%x\n", pc)
+					if err = listFileLineByPtracePc(target.bi, 6); err != nil {
 						printErr(err)
 						return
 					}
 					return
 				}
 				if info, ok = bp.findBreakPoint(pc - 1); ok {
-					if err = bp.disableBreakPoint(info); err != nil {
+					if err = bp.disableBreakPoint(pid, info); err != nil {
 						printErr(err)
 						return
 					}
-					defer bp.enableBreakPoint(info)
-					if err = setPcRegister(pc - 1); err != nil {
+					defer bp.enableBreakPoint(pid, info)
+					if err = setPcRegister(target.cmd, pc-1); err != nil {
 						printErr(err)
 						return
 					}
@@ -359,24 +343,20 @@ func executor(input string) {
 			}
 			if info, ok = bp.findBreakPoint(pc - 1); ok {
 				pc = pc - 1
-				if err = setPcRegister(pc); err != nil {
+				if err = setPcRegister(target.cmd, pc); err != nil {
 					printErr(err)
 					return
 				}
-				if err = bp.disableBreakPoint(info); err != nil {
+				if err = bp.disableBreakPoint(pid, info); err != nil {
 					printErr(err)
 					return
 				}
-				defer bp.enableBreakPoint(info)
+				defer bp.enableBreakPoint(pid, info)
 			}
 			if oldfilename, oldlineno, err = bi.pcTofileLine(pc); err != nil {
 				printErr(err)
 				return
 			}
-			/*if f, err = bi.findFunctionIncludePc(pc); err != nil {
-				printErr(err)
-				return
-			}*/
 
 			calling := false
 			callingfpc := uint64(0)
@@ -387,7 +367,7 @@ func executor(input string) {
 					return
 				}
 				if info, ok = bp.findBreakPoint(pc - 1); ok {
-					if err := listFileLineByPtracePc(6); err != nil {
+					if err := listFileLineByPtracePc(target.bi, 6); err != nil {
 						printErr(err)
 						return
 					}
@@ -420,14 +400,14 @@ func executor(input string) {
 						return
 					}
 					if !(filename == oldfilename && lineno == oldlineno) {
-						if err := listFileLineByPtracePc(6); err != nil {
+						if err := listFileLineByPtracePc(target.bi, 6); err != nil {
 							printErr(err)
 							return
 						}
 						return
 					}
 				} else {
-					if inst, err = bi.getSingleMemInst(pc); err != nil {
+					if inst, err = bi.getSingleMemInst(cmd.Process.Pid, pc); err != nil {
 						printErr(err)
 						return
 					}
@@ -455,20 +435,12 @@ func executor(input string) {
 						printErr(fmt.Errorf("unknown waitstatus %v, signal %d", s, s.Signal()))
 						return
 					}
-					/*fpc := pc + uint64(inst.Len)
-					if !(f.lowpc <= fpc && fpc < f.highpc) {
-						if err := listFileLineByPtracePc(6); err != nil {
-							printErr(err)
-							return
-						}
-						return
-					}*/
 					if filename, lineno, err = bi.pcTofileLine(pc + uint64(inst.Len)); err != nil {
 						printErr(err)
 						return
 					}
 					if !(filename == oldfilename && lineno == oldlineno) {
-						if err := listFileLineByPtracePc(6); err != nil {
+						if err := listFileLineByPtracePc(target.bi, 6); err != nil {
 							printErr(err)
 							return
 						}
@@ -480,7 +452,7 @@ func executor(input string) {
 	case 'l':
 		sps := strings.Split(input, " ")
 		if len(sps) == 1 && (sps[0] == "l" || sps[0] == "list") {
-			if err := listFileLineByPtracePc(6); err != nil {
+			if err := listFileLineByPtracePc(target.bi, 6); err != nil {
 				printErr(err)
 				return
 			}
@@ -533,14 +505,14 @@ func executor(input string) {
 				fmt.Fprintf(stdout, "  stop  old process pid %d\n", pid)
 			}
 			var err error
-			if cmd, err = runexec(execfile); err != nil {
+			if cmd, err = runexec(target.execFile); err != nil {
 				printErr(err)
-				logger.Error(err.Error(), zap.String("stage", "restart:runexec"), zap.String("execfile", execfile))
+				logger.Error(err.Error(), zap.String("stage", "restart:runexec"), zap.String("execfile", target.execFile))
 				return
 			}
-			if err = bp.SetBpWhenRestart(); err != nil {
+			if err = bp.SetBpWhenRestart(target.cmd.Process.Pid); err != nil {
 				printErr(err)
-				logger.Error(err.Error(), zap.String("stage", "restart:setbp"), zap.String("execfile", execfile))
+				logger.Error(err.Error(), zap.String("stage", "restart:setbp"), zap.String("execfile", target.execFile))
 				return
 			}
 			fmt.Fprintf(stdout, "restart new process pid %d \n", cmd.Process.Pid)
@@ -549,7 +521,7 @@ func executor(input string) {
 	case 'd':
 		sps := strings.Split(input, " ")
 		if len(sps) == 1 && (sps[0] == "disass" || sps[0] == "disassemble") {
-			if err := listDisassembleByPtracePc(); err != nil {
+			if err := listDisassembleByPtracePc(target.bi, target.bp, target.cmd.Process.Pid); err != nil {
 				printErr(err)
 				return
 			}
@@ -639,6 +611,12 @@ func executor(input string) {
 			}
 			return
 		}
+	case 'h':
+		sps := strings.Split(input, " ")
+		if len(sps) == 1 && (sps[0] == "h" || sps[0] == "help") {
+			printCmdHelper()
+			return
+		}
 	}
 	printUnsupportCmd(input)
 }
@@ -652,7 +630,7 @@ func complete(docs prompt.Document) []prompt.Suggest {
 
 	if len(sps) == 2 {
 		if sps[0] == "b" || sps[0] == "break" || sps[0] == "l" || sps[0] == "list" {
-			for filename := range bi.Sources {
+			for filename := range target.bi.Sources {
 				if strings.HasPrefix(filename, sps[1]) {
 					if filename[0] == '/' {
 						filename = filename[1:]

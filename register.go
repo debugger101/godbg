@@ -1,8 +1,11 @@
 package main
 
-import "syscall"
+import (
+	"os/exec"
+	"syscall"
+)
 
-func getRegisters() (syscall.PtraceRegs, error) {
+func getRegisters(cmd *exec.Cmd) (syscall.PtraceRegs, error) {
 	var prs syscall.PtraceRegs
 	if cmd.Process == nil {
 		return prs, NoProcessRuning
@@ -16,18 +19,18 @@ func getPtracePc() (uint64, error) {
 		prs syscall.PtraceRegs
 		err error
 	)
-	if prs, err = getRegisters(); err != nil {
+	if prs, err = getRegisters(target.cmd); err != nil {
 		return 0, err
 	}
 	return prs.PC(), nil
 }
 
-func setPcRegister(pc uint64) error {
+func setPcRegister(cmd *exec.Cmd, pc uint64) error {
 	var (
 		prs syscall.PtraceRegs
 		err error
 	)
-	if prs, err = getRegisters(); err != nil {
+	if prs, err = getRegisters(target.cmd); err != nil {
 		return err
 	}
 	prs.SetPC(pc)
@@ -39,7 +42,7 @@ func getPtraceBp() (uint64, error) {
 		prs syscall.PtraceRegs
 		err error
 	)
-	if prs, err = getRegisters(); err != nil {
+	if prs, err = getRegisters(target.cmd); err != nil {
 		return 0, err
 	}
 	return prs.Rbp, nil

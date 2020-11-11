@@ -10,10 +10,11 @@ import (
 )
 
 func clear_variable() {
-	bp = &BP{}
+	target = &Target{
+		bi: &BI{},
+		bp: &BP{},
+	}
 	logger = log.Log
-	bi = nil
-	cmd = nil
 
 	stdin = os.Stdin
 	stdout = os.Stdout
@@ -39,12 +40,12 @@ func build_run_debug(filename string) (string, error) {
 	}
 
 	// step 3, analyze executable file; The most import places are "_debug_info", "_debug_line"
-	if bi, err = analyze(execfile); err != nil {
+	if target.bi, err = analyze(execfile); err != nil {
 		return execfile, err
 	}
 
 	// step 4, run executable file
-	if cmd, err = runexec(execfile); err != nil {
+	if target.cmd, err = runexec(execfile); err != nil {
 		return execfile, err
 	}
 
@@ -177,7 +178,7 @@ func TestVarDefLineContinue(t *testing.T) {
 	execfile, err = build_run_debug("./test_file/t1.go")
 	g.Expect(err).Should(BeNil())
 	defer os.Remove(execfile)
-	pid := cmd.Process.Pid
+	pid := target.cmd.Process.Pid
 
 	executor("b ./test_file/t1.go:6")
 	g.Expect(outw.String()).Should(ContainSubstring("godbg add ./test_file/t1.go:6 breakpoint successfully"))
@@ -208,7 +209,7 @@ func TestFuncDefLineContinue(t *testing.T) {
 	execfile, err = build_run_debug("./test_file/t1.go")
 	g.Expect(err).Should(BeNil())
 	defer os.Remove(execfile)
-	pid := cmd.Process.Pid
+	pid := target.cmd.Process.Pid
 
 	executor("b ./test_file/t1.go:5")
 	g.Expect(outw.String()).Should(ContainSubstring("godbg add ./test_file/t1.go:5 breakpoint successfully"))
@@ -239,7 +240,7 @@ func TestFuncCallLineContinue(t *testing.T) {
 	execfile, err = build_run_debug("./test_file/t1.go")
 	g.Expect(err).Should(BeNil())
 	defer os.Remove(execfile)
-	pid := cmd.Process.Pid
+	pid := target.cmd.Process.Pid
 
 	executor("b ./test_file/t1.go:12")
 
@@ -270,7 +271,7 @@ func TestForExpressionContinue(t *testing.T) {
 	execfile, err = build_run_debug("./test_file/t2.go")
 	g.Expect(err).Should(BeNil())
 	defer os.Remove(execfile)
-	pid := cmd.Process.Pid
+	pid := target.cmd.Process.Pid
 
 	executor("b ./test_file/t2.go:7")
 
@@ -311,7 +312,7 @@ func TestBreakClearContinue(t *testing.T) {
 	execfile, err = build_run_debug("./test_file/t2.go")
 	g.Expect(err).Should(BeNil())
 	defer os.Remove(execfile)
-	pid := cmd.Process.Pid
+	pid := target.cmd.Process.Pid
 
 	executor("b ./test_file/t2.go:7")
 
@@ -352,7 +353,7 @@ func TestNextAssignExpression(t *testing.T) {
 	execfile, err = build_run_debug("./test_file/t3.go")
 	g.Expect(err).Should(BeNil())
 	defer os.Remove(execfile)
-	pid := cmd.Process.Pid
+	pid := target.cmd.Process.Pid
 
 	executor("b ./test_file/t3.go:6")
 
@@ -398,7 +399,7 @@ func TestNextCallExpress(t *testing.T) {
 	execfile, err = build_run_debug("./test_file/t3.go")
 	g.Expect(err).Should(BeNil())
 	defer os.Remove(execfile)
-	pid := cmd.Process.Pid
+	pid := target.cmd.Process.Pid
 
 	executor("b ./test_file/t3.go:10")
 
@@ -439,7 +440,7 @@ func TestCallStack(t *testing.T) {
 	execfile, err = build_run_debug("./test_file/t4.go")
 	g.Expect(err).Should(BeNil())
 	defer os.Remove(execfile)
-	pid := cmd.Process.Pid
+	pid := target.cmd.Process.Pid
 
 	executor("b ./test_file/t4.go:6")
 
@@ -500,7 +501,7 @@ func TestPrintString(t *testing.T) {
 	execfile, err = build_run_debug("./test_file/t5.go")
 	g.Expect(err).Should(BeNil())
 	defer os.Remove(execfile)
-	pid := cmd.Process.Pid
+	pid := target.cmd.Process.Pid
 
 	executor("b ./test_file/t5.go:11")
 
@@ -537,7 +538,7 @@ func TestPrintString2(t *testing.T) {
 	execfile, err = build_run_debug("./test_file/t6.go")
 	g.Expect(err).Should(BeNil())
 	defer os.Remove(execfile)
-	pid := cmd.Process.Pid
+	pid := target.cmd.Process.Pid
 
 	executor("b ./test_file/t6.go:7")
 

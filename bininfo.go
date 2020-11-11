@@ -379,7 +379,7 @@ func (bi *BI) findFrameInformation(pc uint64) (*Frame, error) {
 		}
 	}
 	if fde == nil {
-		return nil, fmt.Errorf("not find the frame cover pc = %d", pc)
+		return nil, fmt.Errorf("not find the frame cover pc = 0x%x", pc)
 	}
 
 	cie := fde.CIE
@@ -406,7 +406,7 @@ func (bi *BI) findFrameInformation(pc uint64) (*Frame, error) {
 		regs syscall.PtraceRegs
 		err  error
 	)
-	if regs, err = getRegisters(); err != nil {
+	if regs, err = getRegisters(target.cmd); err != nil {
 		return nil, err
 	}
 
@@ -470,26 +470,26 @@ func parseLoc(loc string) (string, int, error) {
 	return filename, lineno, nil
 }
 
-func (b *BI) locToPc(loc string) (uint64, error) {
+func (bi *BI) locToPc(loc string) (uint64, error) {
 	filename, lineno, err := parseLoc(loc)
 	if err != nil {
 		return 0, err
 	}
-	return b.fileLineToPc(filename, lineno)
+	return bi.fileLineToPc(filename, lineno)
 }
 
-func (b *BI) fileLineToPc(filename string, lineno int) (uint64, error) {
-	if b.Sources[filename] == nil || b.Sources[filename][lineno] == nil || len(b.Sources[filename][lineno]) == 0 {
+func (bi *BI) fileLineToPc(filename string, lineno int) (uint64, error) {
+	if bi.Sources[filename] == nil || bi.Sources[filename][lineno] == nil || len(bi.Sources[filename][lineno]) == 0 {
 		return 0, NotFoundSourceLineErr
 	}
-	return b.Sources[filename][lineno][0].Address, nil
+	return bi.Sources[filename][lineno][0].Address, nil
 }
 
-func (b *BI) fileLineToPcForBreakPoint(filename string, lineno int) (uint64, error) {
-	if b.Sources[filename] == nil || b.Sources[filename][lineno] == nil || len(b.Sources[filename][lineno]) == 0 {
+func (bi *BI) fileLineToPcForBreakPoint(filename string, lineno int) (uint64, error) {
+	if bi.Sources[filename] == nil || bi.Sources[filename][lineno] == nil || len(bi.Sources[filename][lineno]) == 0 {
 		return 0, NotFoundSourceLineErr
 	}
-	lineEntryArray := b.Sources[filename][lineno]
+	lineEntryArray := bi.Sources[filename][lineno]
 	for _, v := range lineEntryArray {
 		if v.PrologueEnd {
 			return v.Address, nil
@@ -511,7 +511,7 @@ func (b *BI) fileLineToPcForBreakPoint(filename string, lineno int) (uint64, err
 	return addr, nil
 }
 
-func (b *BI) getCurFileLineByPtracePc() (string, int, error) {
+func (bi *BI) getCurFileLineByPtracePc() (string, int, error) {
 	var (
 		pc  uint64
 		err error
@@ -523,8 +523,8 @@ func (b *BI) getCurFileLineByPtracePc() (string, int, error) {
 	return bi.pcTofileLine(pc)
 }
 
-func (b *BI) pcTofileLine(pc uint64) (string, int, error) {
-	if b.Sources == nil {
+func (bi *BI) pcTofileLine(pc uint64) (string, int, error) {
+	if bi.Sources == nil {
 		return "", 0, errors.New("no sources file")
 	}
 
@@ -538,7 +538,7 @@ func (b *BI) pcTofileLine(pc uint64) (string, int, error) {
 	rangeMin := &Rs{}
 	rangeMax := &Rs{}
 
-	for filename, filenameMp := range b.Sources {
+	for filename, filenameMp := range bi.Sources {
 		for lineno, lineEntryArray := range filenameMp {
 			for _, lineEntry := range lineEntryArray {
 				if lineEntry.Address == pc {
@@ -563,7 +563,7 @@ func (b *BI) pcTofileLine(pc uint64) (string, int, error) {
 	return rangeMin.filename, rangeMin.lineno, nil
 }
 
-func (bi *BI) getSingleMemInst(pc uint64) (x86asm.Inst, error) {
+func (bi *BI) getSingleMemInst(pid int, pc uint64) (x86asm.Inst, error) {
 	var (
 		mem  []byte
 		err  error
@@ -571,7 +571,7 @@ func (bi *BI) getSingleMemInst(pc uint64) (x86asm.Inst, error) {
 	)
 
 	mem = make([]byte, 100)
-	if _, err = syscall.PtracePeekData(cmd.Process.Pid, uintptr(pc), mem); err != nil {
+	if _, err = syscall.PtracePeekData(pid, uintptr(pc), mem); err != nil {
 		return x86asm.Inst{}, err
 	}
 	if inst, err = x86asm.Decode(mem, 64); err != nil {
