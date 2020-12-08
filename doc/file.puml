@@ -1,0 +1,226 @@
+@startuml
+
+package "main" {
+	class "A" as main.A <<V,Orchid>> {
+		-a: string
+	}
+}
+
+
+
+package "main" {
+	class "BI" as main.BI <<E,#FFCC00>> {
+		+Sources: dwarf.LineEntry
+		+Functions: []*main.Function
+		+CompileUnits: []*main.CompileUnit
+		+FramesInformation: []*main.VirtualUnwindFrameInformation
+		+ParseLineAndInfoSection(dwarfData: dwarf.Data): error
+		-findFunctionIncludePc(pc: uint64): (*main.Function, error)
+		+ParseFrameSection(elffile: elf.File): error
+		-findFrameInformation(pc: uint64): (*main.Frame, error)
+		-locToPc(loc: string): (uint64, error)
+		-fileLineToPc(filename: string, lineno: int): (uint64, error)
+		-fileLineToPcForBreakPoint(filename: string, lineno: int): (uint64, error)
+		-getCurFileLineByPtracePc(): (string, int, error)
+		-pcTofileLine(pc: uint64): (string, int, error)
+		-getSingleMemInst(pid: int, pc: uint64): (x86asm.Inst, error)
+	}
+}
+
+
+package "main" {
+	class "BInfo" as main.BInfo <<V,Orchid>> {
+		-original: []byte
+		-filename: string
+		-lineno: int
+		-pc: uint64
+		-kind: main.BPKIND
+	}
+}
+
+	main.BInfo --> main.BPKIND
+
+
+package "main" {
+	class "BP" as main.BP <<E,#FFCC00>> {
+		-infos: []*main.BInfo
+		-pid: int
+		-setPcBreakPoint(pid: int, pc: uint64): ([]byte, error)
+		+SetInternalBreakPoint(pid: int, pc: uint64): (*main.BInfo, error)
+		+SetFileLineBreakPoint(bi: *main.BI, pid: int, filename: string, lineno: int): (*main.BInfo, error)
+		+Continue(pid: int): error
+		-findBreakPoint(pc: uint64): (*main.BInfo, bool)
+		-enableBreakPoint(pid: int, info: *main.BInfo): error
+		-disableBreakPoint(pid: int, info: *main.BInfo): error
+		-singleStepInstructionWithBreakpointCheck(pid: int): error
+		-clearInternalBreakPoint(pc: uint64)
+		+SetBpWhenRestart(pid: int): error
+	}
+}
+
+
+	main.BP ..> main.BInfo : <<return>> 
+	main.BP ..> main.BI : <<use>>
+	main.BP ..> main.BInfo : <<return>> 
+
+package "main" {
+	class "BPKIND" as main.BPKIND <<V,Orchid>> {
+		+String(): string
+	}
+}
+
+
+
+package "main" {
+	class "CommonInformationEntry" as main.CommonInformationEntry <<V,Orchid>> {
+		-length: uint32
+		-cie_id: uint64
+		-version: byte
+		-augmentation: string
+		-code_alignment_factor: uint64
+		-data_alignment_factor: int64
+		-return_address_register: uint64
+		-initial_instructions: []byte
+		+String(): string
+	}
+}
+
+
+
+package "main" {
+	class "CompileUnit" as main.CompileUnit <<V,Orchid>> {
+		-functions: []*main.Function
+	}
+}
+
+
+
+package "main" {
+	class "DWRule" as main.DWRule <<V,Orchid>> {
+		-offset: int64
+		-reg: uint64
+		-rule: main.Rule
+	}
+}
+
+	main.DWRule --> main.Rule
+
+
+package "main" {
+	class "Frame" as main.Frame <<V,Orchid>> {
+		-instructions: []byte
+		-address: uint64
+		-cie: *main.CommonInformationEntry
+		+Offset: int64
+		-cfa: *main.DWRule
+		-regsRule: map[uint64]main.DWRule
+		-regs: []uint64
+		-framebase: uint64
+		-loc: uint64
+	}
+}
+
+	main.Frame --> main.CommonInformationEntry
+	main.Frame --> main.DWRule
+	main.Frame --> main.DWRule
+
+
+package "main" {
+	class "FrameDescriptionEntry" as main.FrameDescriptionEntry <<V,Orchid>> {
+		-length: uint32
+		+CIE: *main.CommonInformationEntry
+		-instructions: []byte
+		-begin: uint64
+		-size: uint64
+		+String(): string
+	}
+}
+
+	main.FrameDescriptionEntry --> main.CommonInformationEntry
+
+
+package "main" {
+	class "Function" as main.Function <<V,Orchid>> {
+		-name: string
+		-lowpc: uint64
+		-highpc: uint64
+		-frameBase: []byte
+		-declFile: int64
+		-external: bool
+		-variables: dwarf.Entry
+		-cu: *main.CompileUnit
+	}
+}
+
+	main.Function --> main.CompileUnit
+
+
+package "main" {
+	class "NotFoundFuncErr" as main.NotFoundFuncErr <<V,Orchid>> {
+		-pc: uint64
+		+Error(): string
+	}
+}
+
+
+
+package "main" {
+	class "Rule" as main.Rule <<V,Orchid>>
+}
+
+
+
+package "main" {
+	class "Target" as main.Target <<V,Orchid>> {
+		-bp: *main.BP
+		-bi: *main.BI
+		-cmd: exec.Cmd
+		-execFile: string
+	}
+}
+
+	main.Target --> main.BP
+	main.Target --> main.BI
+
+
+package "main" {
+	class "VirtualUnwindFrameInformation" as main.VirtualUnwindFrameInformation <<V,Orchid>> {
+		-len: uint32
+		+CIE: *main.CommonInformationEntry
+		+FDE: *main.FrameDescriptionEntry
+	}
+}
+
+	main.VirtualUnwindFrameInformation --> main.CommonInformationEntry
+	main.VirtualUnwindFrameInformation --> main.FrameDescriptionEntry
+
+
+
+package "main" {
+	note as N_main_BPKIND
+		<b>BPKIND</b>
+
+		INTERNALBPTYPE
+		USERBPTYPE
+	end note
+}
+N_main_BPKIND --> main.BPKIND
+package "main" {
+	note as N_main_Rule
+		<b>Rule</b>
+
+		RuleArchitectural
+		RuleCFA
+		RuleExpression
+		RuleFramePointer
+		RuleOffset
+		RuleRegister
+		RuleSameVal
+		RuleUndefined
+		RuleValExpression
+		RuleValOffset
+	end note
+}
+N_main_Rule --> main.Rule
+
+@enduml
